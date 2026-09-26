@@ -13,17 +13,17 @@ export const apiEndpoints = {
     featuredProducts: "/products/featured",
     popularProducts: "/products/popular",
     categories: "/categories",
-    productDetails: (slug: string) => `/products/${slug}`,
+    productDetails: (slug: string) => `/products/${encodeURIComponent(slug)}`,
     search: "/products/search",
   },
   cart: {
     root: "/cart",
     items: "/cart/items",
-    item: (itemId: number) => `/cart/items/${itemId}`,
+    item: (itemId: number) => `/cart/items/${encodeURIComponent(String(itemId))}`,
   },
   wishlist: {
     root: "/wishlist",
-    item: (productId: number) => `/wishlist/${productId}`,
+    item: (productId: number) => `/wishlist/${encodeURIComponent(String(productId))}`,
   },
   checkout: {
     addresses: "/checkout/addresses",

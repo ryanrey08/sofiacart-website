@@ -41,6 +41,16 @@ const foundationCards = [
   },
 ] as const;
 
+const authEndpointList = [
+  apiEndpoints.auth.register,
+  apiEndpoints.auth.login,
+  apiEndpoints.auth.logout,
+  apiEndpoints.auth.forgotPassword,
+  apiEndpoints.auth.resetPassword,
+  apiEndpoints.auth.oauth,
+  apiEndpoints.auth.profile,
+];
+
 export default function Home() {
   return (
     <Container className="space-y-10 py-12 lg:space-y-14 lg:py-16">
@@ -81,7 +91,7 @@ export default function Home() {
             <div>
               <p className="font-medium text-foreground">Planned auth endpoints</p>
               <code className="block rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-                {Object.values(apiEndpoints.auth).join("\n")}
+                {authEndpointList.join("\n")}
               </code>
             </div>
           </CardContent>

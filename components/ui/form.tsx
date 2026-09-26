@@ -38,7 +38,7 @@ function FormField<
   );
 }
 
-const FormItemContext = React.createContext<{ id: string }>({ id: "" });
+const FormItemContext = React.createContext<{ id: string } | undefined>(undefined);
 
 function FormItem({ className, ...props }: React.ComponentProps<"div">) {
   const id = React.useId();
@@ -56,6 +56,9 @@ function useFormField() {
 
   if (fieldContext === undefined) {
     throw new Error("useFormField should be used within <FormField>");
+  }
+  if (itemContext === undefined) {
+    throw new Error("useFormField should be used within <FormItem>");
   }
 
   const { getFieldState, formState } = useFormContext();
