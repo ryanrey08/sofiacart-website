@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Heart, Search, ShoppingCart } from "lucide-react";
+import { ShoppingCart, UserRound } from "lucide-react";
 
 import { Navigation } from "@/components/layout/navigation";
 import { Badge } from "@/components/ui/badge";
@@ -25,17 +25,19 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          <Button variant="outline" size="icon" aria-label="Search catalog">
-            <Search className="size-4" />
+          <Button variant="outline" asChild>
+            <Link href="/register">
+              <UserRound className="size-4" />
+              Account
+            </Link>
           </Button>
-          <Button variant="outline" size="icon" aria-label="Wishlist">
-            <Heart className="size-4" />
-          </Button>
-          <Button variant="outline" size="icon" aria-label="Shopping cart" className="relative">
-            <ShoppingCart className="size-4" />
-            <Badge className="absolute -right-2 -top-2 size-5 justify-center rounded-full px-0 py-0 text-[10px]">
-              0
-            </Badge>
+          <Button variant="outline" size="icon" asChild className="relative" aria-label="Shopping cart">
+            <Link href="/cart">
+              <ShoppingCart className="size-4" />
+              <Badge className="absolute -right-2 -top-2 size-5 justify-center rounded-full px-0 py-0 text-[10px]">
+                0
+              </Badge>
+            </Link>
           </Button>
         </div>
       </Container>
