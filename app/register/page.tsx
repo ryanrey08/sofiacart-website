@@ -1,16 +1,20 @@
-import { PagePlaceholder } from "@/components/layout/page-placeholder";
+import { Container } from "@/components/layout/container";
+import { RegisterForm } from "@/components/storefront/register-form";
+import { Badge } from "@/components/ui/badge";
 
 export default function RegisterPage() {
   return (
-    <PagePlaceholder
-      title="Registration flow structure"
-      description="Prepared route for the reference registration page, including the core sections that will be wired to React Hook Form and backend auth endpoints in the next phase."
-      sections={[
-        { title: "Personal information", description: "Name, email, and contact fields." },
-        { title: "Account security", description: "Password and password confirmation inputs." },
-        { title: "Shipping address", description: "Address fields and default delivery settings." },
-        { title: "Terms & conditions", description: "Consent checkbox and account creation action." },
-      ]}
-    />
+    <Container className="space-y-8 py-12 lg:py-16">
+      <div className="space-y-4">
+        <Badge variant="secondary">Registration</Badge>
+        <div className="space-y-3">
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Create your SofiaCart account</h1>
+          <p className="max-w-3xl text-base text-muted-foreground">
+            This customer registration page now uses the shared form system with validation for personal information, account security, shipping address, and terms acceptance.
+          </p>
+        </div>
+      </div>
+      <RegisterForm />
+    </Container>
   );
 }

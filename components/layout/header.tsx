@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { ShoppingCart, UserRound } from "lucide-react";
+import { UserRound } from "lucide-react";
 
 import { Navigation } from "@/components/layout/navigation";
-import { Badge } from "@/components/ui/badge";
+import { CartIndicator } from "@/components/layout/cart-indicator";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { siteConfig } from "@/lib/constants/site";
@@ -18,7 +18,7 @@ export function Header() {
             </span>
             <div>
               <p className="font-semibold text-foreground">{siteConfig.appName}</p>
-              <p className="text-xs text-muted-foreground">Design system foundation</p>
+              <p className="text-xs text-muted-foreground">Fresh finds, faster checkout</p>
             </div>
           </Link>
           <Navigation className="hidden md:flex" />
@@ -31,14 +31,7 @@ export function Header() {
               Account
             </Link>
           </Button>
-          <Button variant="outline" size="icon" asChild className="relative" aria-label="Shopping cart">
-            <Link href="/cart">
-              <ShoppingCart className="size-4" />
-              <Badge className="absolute -right-2 -top-2 size-5 justify-center rounded-full px-0 py-0 text-[10px]">
-                0
-              </Badge>
-            </Link>
-          </Button>
+          <CartIndicator />
         </div>
       </Container>
     </header>
