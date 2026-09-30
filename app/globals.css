@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fcfcff;
+  --foreground: #171746;
+  --card: #ffffff;
+  --card-foreground: #171746;
+  --popover: #ffffff;
+  --popover-foreground: #171746;
+  --primary: #7c22cf;
+  --primary-foreground: #f8f4ff;
+  --secondary: #ff8b59;
+  --secondary-foreground: #2f1405;
+  --accent: #f43f5e;
+  --accent-foreground: #fff1f4;
+  --muted: #f4effa;
+  --muted-foreground: #5b5b7f;
+  --border: #e7ddf4;
+  --input: #e7ddf4;
+  --ring: #7c22cf;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --radius: 1rem;
+}
+
+.dark {
+  --background: #110f2d;
+  --foreground: #f7f3ff;
+  --card: #1a1642;
+  --card-foreground: #f7f3ff;
+  --popover: #1a1642;
+  --popover-foreground: #f7f3ff;
+  --primary: #9b5cf6;
+  --primary-foreground: #110f2d;
+  --secondary: #ff9e74;
+  --secondary-foreground: #2f1405;
+  --accent: #fb7185;
+  --accent-foreground: #311019;
+  --muted: #211c4c;
+  --muted-foreground: #bdb7ea;
+  --border: #2d2760;
+  --input: #2d2760;
+  --ring: #9b5cf6;
+  --destructive: #f87171;
+  --destructive-foreground: #2f0005;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --radius-sm: calc(var(--radius) - 0.5rem);
+  --radius-md: calc(var(--radius) - 0.25rem);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 0.5rem);
+  --font-sans: "Inter", "Segoe UI", Arial, sans-serif;
+  --font-mono: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  a {
+    @apply transition-colors;
+  }
+}
