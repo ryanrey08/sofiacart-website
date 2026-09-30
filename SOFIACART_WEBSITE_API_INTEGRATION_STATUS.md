@@ -4,7 +4,7 @@
 
 This change connects the existing storefront to the public catalog contract described in the issue. The issue identifies backend `main` at `c25404bbccd7d2acaa6feb265c1d11599485988f` as implementing only the four public catalog routes listed below. I could not independently inspect the backend repository: GitHub API and raw-file requests for `ryanrey08/sofiacart-website-backend` returned 404. Therefore the frontend contract is based on that supplied, verified snapshot; the latest backend source and live response behavior remain unverified.
 
-The frontend source branch is `sofia-cart-website` at `1c04fba8a4be262e1528a00c508c7ee336769117`. The task PR (#2) is currently based on README-only `main` (`389e5e83e1e302c78ce6a398346c3528c9f2737e`). The source-bearing branch was merged into the task branch to preserve the existing application. The available GitHub tools did not provide a way to retarget PR #2, and the browser tool was unavailable. For a focused review, PR #2 must target `sofia-cart-website`; against `main`, its diff also contains the pre-existing frontend foundation.
+The frontend source branch is `sofia-cart-website` at `1c04fba8a4be262e1528a00c508c7ee336769117`. The task PR (#2) is currently a draft based on README-only `main` (`389e5e83e1e302c78ce6a398346c3528c9f2737e`). The source-bearing branch was merged into the task branch to preserve the existing application. The available GitHub tools did not provide a way to retarget PR #2 or mark it ready for review, and the browser tool was unavailable. For a focused review, PR #2 must target `sofia-cart-website`; against `main`, its diff also contains the pre-existing frontend foundation. A maintainer must retarget and mark the PR ready.
 
 ## Catalog endpoints
 
@@ -56,13 +56,15 @@ The existing registration page remains a UI preview, but its submit action is di
 - `npm run build` — passed with Next.js 16.3.6; the existing App Router routes compiled and prerendered.
 - Production route smoke check — `GET /`, `/register`, `/cart`, `/checkout`, and `/order/complete` each returned HTTP 200.
 - `git diff --check` — passed.
+- CodeQL security scan — completed with zero alerts.
+- Code Review validation — no comments were returned, but the review binary was unavailable; no substantive automated review result is available.
 - Tests — no test script or existing test/spec files are present in the frontend.
 - Backend request verification — not run: backend GitHub and raw-file requests returned 404, so no live API host or accessible backend source was available.
 
 ## Remaining work and blockers
 
 1. Restore access to the backend repository and verify its latest branch, routes, resources, and real catalog responses against this adapter.
-2. Retarget PR #2 to `sofia-cart-website` so the review diff excludes the pre-existing frontend foundation.
+2. Have a maintainer retarget PR #2 to `sofia-cart-website` and mark it ready for review so the diff excludes the pre-existing frontend foundation.
 3. Configure a reachable API URL and verify CORS, category/product payloads, pagination, search, images, and error behavior against the running backend.
 4. Obtain a backend-defined currency before presenting product amounts as currency values.
 5. Implement customer flows only after the corresponding backend APIs and contracts exist.
