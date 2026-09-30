@@ -34,7 +34,7 @@ export function CartPageClient() {
       <Card>
         <CardHeader>
           <CardTitle>Your cart</CardTitle>
-          <CardDescription>Review items, adjust quantities, and continue when your basket looks right.</CardDescription>
+          <CardDescription>Example items are stored only in this browser; they are not a server-backed cart.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {items.length === 0 ? (
@@ -115,7 +115,7 @@ export function CartPageClient() {
         <Card className="bg-muted/40">
           <CardContent className="flex items-start gap-3 p-5 text-sm text-muted-foreground">
             <ShoppingBag className="mt-0.5 size-4 text-primary" />
-            <p>Spend ₱1,500 or more to unlock free standard delivery in the next integration phase.</p>
+            <p>Cart totals and delivery estimates are examples only and are not validated by the backend.</p>
           </CardContent>
         </Card>
       </div>

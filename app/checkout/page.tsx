@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { ArrowRight, CheckCircle2, CreditCard, MapPin, Truck } from "lucide-react";
+import { CheckCircle2, CreditCard, MapPin, Truck } from "lucide-react";
 
 import { Container } from "@/components/layout/container";
 import { Badge } from "@/components/ui/badge";
@@ -24,10 +23,16 @@ export default function CheckoutPage() {
         <div className="space-y-3">
           <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Complete your order with confidence</h1>
           <p className="max-w-3xl text-base text-muted-foreground">
-            The checkout route now includes actual shipping, delivery, payment, and order review sections mapped to the SofiaCart customer flow.
+            This is a layout preview only. No address, shipping, checkout, order, or payment API is available.
           </p>
         </div>
       </div>
+
+      <Card className="border-destructive/30 bg-destructive/5">
+        <CardContent className="p-5 text-sm text-muted-foreground">
+          Values below are examples and will not be submitted. No purchase can be completed.
+        </CardContent>
+      </Card>
 
       <div className="grid gap-2 rounded-2xl bg-muted/40 p-2 md:grid-cols-4">
         {checkoutSteps.map((step, index) => (
@@ -49,7 +54,7 @@ export default function CheckoutPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><MapPin className="size-5 text-primary" /> Shipping details</CardTitle>
-              <CardDescription>Default delivery address prepared for account and checkout API wiring.</CardDescription>
+              <CardDescription>Sample address only; address management is not available.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-sm text-muted-foreground">
               <p className="font-medium text-foreground">{sampleAddress.recipientName}</p>
@@ -83,7 +88,7 @@ export default function CheckoutPage() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><CreditCard className="size-5 text-primary" /> Payment method</CardTitle>
-              <CardDescription>Ready for future gateway and cash-on-delivery integration.</CardDescription>
+              <CardDescription>Sample methods only; no payment API is available.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {paymentMethods.map((method, index) => (
@@ -100,7 +105,7 @@ export default function CheckoutPage() {
           <Card>
             <CardHeader>
               <CardTitle>Order review</CardTitle>
-              <CardDescription>Summary of items and total before confirming checkout.</CardDescription>
+              <CardDescription>Example order summary only; totals are not validated by the backend.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
               {sampleCart.items.map((item) => (
@@ -118,11 +123,8 @@ export default function CheckoutPage() {
               <div className="flex items-center justify-between"><span className="text-muted-foreground">Tax</span><span>{formatCurrency(sampleCart.tax)}</span></div>
               <Separator />
               <div className="flex items-center justify-between text-base font-semibold"><span>Total</span><span>{formatCurrency(sampleCart.total)}</span></div>
-              <Button asChild className="w-full" size="lg">
-                <Link href="/order/complete">
-                  Place order
-                  <ArrowRight className="size-4" />
-                </Link>
+              <Button className="w-full" disabled size="lg">
+                Ordering unavailable
               </Button>
             </CardContent>
           </Card>
@@ -130,7 +132,7 @@ export default function CheckoutPage() {
           <Card className="border-secondary/30 bg-secondary/10">
             <CardContent className="flex items-start gap-3 p-5 text-sm text-secondary-foreground">
               <CheckCircle2 className="mt-0.5 size-4" />
-              <p>Once backend wiring is added, this summary can submit directly to the checkout order endpoint without changing the layout structure.</p>
+              <p>No order was created. Customer checkout APIs are not implemented.</p>
             </CardContent>
           </Card>
         </div>

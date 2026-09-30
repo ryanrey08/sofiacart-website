@@ -1,60 +1,43 @@
-import type { Address, Cart, Category, Order, Product, User, WishlistItem } from "@/types/domain";
-
-export interface ApiMeta {
-  currentPage?: number;
-  perPage?: number;
-  total?: number;
-}
-
-export interface ApiEnvelope<T> {
-  data: T;
-  message?: string;
-  meta?: ApiMeta;
-}
-
 export interface ApiErrorResponse {
   message: string;
   errors?: Record<string, string[]>;
 }
 
-export interface AuthTokens {
-  accessToken: string;
-  tokenType?: string;
-}
-
-export interface RegisterPayload {
+export interface CatalogCategory {
+  id: number;
   name: string;
-  email: string;
-  phone?: string;
-  password: string;
-  passwordConfirmation: string;
-  shippingAddress?: Omit<Address, "id">;
+  slug: string;
+  description: string | null;
+  imageUrl: string | null;
 }
 
-export interface LoginPayload {
-  email: string;
-  password: string;
-  remember?: boolean;
+export interface CatalogProduct {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  price: number;
+  imageUrl: string | null;
+  category: CatalogCategory | null;
+  inStock: boolean;
 }
 
-export interface AuthResponse {
-  user: User;
-  tokens: AuthTokens;
+export interface CatalogPaginationMeta {
+  current_page?: number;
+  last_page?: number;
+  per_page?: number;
+  total?: number;
 }
 
-export interface ProductListResponse {
-  products: Product[];
-  categories?: Category[];
+export interface CatalogPaginationLinks {
+  first?: string | null;
+  last?: string | null;
+  prev?: string | null;
+  next?: string | null;
 }
 
-export interface CartResponse {
-  cart: Cart;
-}
-
-export interface WishlistResponse {
-  items: WishlistItem[];
-}
-
-export interface OrdersResponse {
-  orders: Order[];
+export interface ApiResourceCollection<T> {
+  data: T[];
+  links?: CatalogPaginationLinks;
+  meta?: CatalogPaginationMeta;
 }

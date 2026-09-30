@@ -1,7 +1,6 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -56,16 +55,11 @@ const defaultValues: RegisterValues = {
 };
 
 export function RegisterForm() {
-  const [submittedName, setSubmittedName] = useState<string | null>(null);
   const form = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
     defaultValues,
     mode: "onBlur",
   });
-
-  const onSubmit = (values: RegisterValues) => {
-    setSubmittedName(`${values.firstName} ${values.lastName}`);
-  };
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
@@ -73,12 +67,12 @@ export function RegisterForm() {
         <CardHeader>
           <CardTitle>Create your SofiaCart account</CardTitle>
           <CardDescription>
-            Complete the essentials below so checkout, order tracking, and future reorder flows are ready.
+            This form is a preview only. Customer registration is not available because the backend has no registration API.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form className="space-y-8" onSubmit={form.handleSubmit(onSubmit)}>
+            <form className="space-y-8" onSubmit={(event) => event.preventDefault()}>
               <section className="space-y-4">
                 <div>
                   <h2 className="text-lg font-semibold">Personal Information</h2>
@@ -267,7 +261,7 @@ export function RegisterForm() {
               />
 
               <div className="flex flex-wrap items-center gap-3">
-                <Button size="lg" type="submit">Create account</Button>
+                <Button disabled size="lg" type="submit">Registration unavailable</Button>
                 <Button variant="ghost" type="button" onClick={() => form.reset(defaultValues)}>
                   Reset form
                 </Button>
@@ -294,18 +288,11 @@ export function RegisterForm() {
 
         <Card className="border-primary/30 bg-primary/5">
           <CardHeader>
-            <CardTitle>Submission preview</CardTitle>
-            <CardDescription>This demo route validates the form client-side and prepares the payload structure for API wiring.</CardDescription>
+            <CardTitle>Registration status</CardTitle>
+            <CardDescription>Form data is not sent or saved.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
-            {submittedName ? (
-              <>
-                <p className="font-medium text-foreground">Account ready for {submittedName}</p>
-                <p>The registration form is validated and ready to connect to the backend register endpoint next.</p>
-              </>
-            ) : (
-              <p>Complete the form and submit to confirm the customer account experience.</p>
-            )}
+            <p>Account creation requires customer authentication APIs, which are not implemented.</p>
           </CardContent>
         </Card>
       </div>
