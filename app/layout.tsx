@@ -8,7 +8,7 @@ import { siteConfig } from "@/lib/constants/site";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: siteConfig.appName,
+  title: { default: `${siteConfig.appName} — ${siteConfig.tagline}`, template: `%s | ${siteConfig.appName}` },
   description: siteConfig.description,
 };
 

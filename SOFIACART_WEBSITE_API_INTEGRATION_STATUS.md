@@ -1,5 +1,7 @@
 # SofiaCart Website API Integration Status
 
+> **Superseded (2026-10-02)** by [`SOFIACART_WEBSITE_UI_API_STATUS.md`](SOFIACART_WEBSITE_UI_API_STATUS.md). This document described a catalog-only integration written without access to the backend source. The full `sofiacart-website-backend` contract has since been verified and integrated; `lib/api/catalog.ts` and `components/storefront/catalog-sections.tsx` were replaced by `lib/api/services/*` and `hooks/*`. It is kept as a record of PR #2.
+
 ## Scope and verification boundary
 
 This change connects the existing storefront to the public catalog contract described in the issue. The issue identifies backend `main` at `c25404bbccd7d2acaa6feb265c1d11599485988f` as implementing only the four public catalog routes listed below. I could not independently inspect the backend repository: GitHub API and raw-file requests for `ryanrey08/sofiacart-website-backend` returned 404. Therefore the frontend contract is based on that supplied, verified snapshot; the latest backend source and live response behavior remain unverified.

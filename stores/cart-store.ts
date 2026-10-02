@@ -1,60 +1,70 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
-import type { CartItem } from "@/types/domain";
+/**
+ * Guest cart, kept in the browser until the shopper signs in. It stores product references and
+ * quantities; on sign-in it is merged into the server cart (`POST /cart/merge`), which re-prices
+ * every line. `displayPrice` is only the catalog price shown while browsing, never a total.
+ */
+export interface GuestCartItem {
+  productId: number;
+  variantId: number | null;
+  variantLabel: string | null;
+  quantity: number;
+  name: string;
+  slug: string;
+  imageUrl: string | null;
+  displayPrice: number;
+  currency: string;
+}
+
+const sameLine = (a: Pick<GuestCartItem, "productId" | "variantId">, b: Pick<GuestCartItem, "productId" | "variantId">) =>
+  a.productId === b.productId && (a.variantId ?? null) === (b.variantId ?? null);
 
 interface CartState {
-  currency: string;
-  items: CartItem[];
-  addItem: (item: CartItem) => void;
-  removeItem: (productId: number) => void;
-  updateQuantity: (productId: number, quantity: number) => void;
-  replaceItems: (payload: { currency: string; items: CartItem[] }) => void;
+  items: GuestCartItem[];
+  addItem: (item: GuestCartItem) => void;
+  removeItem: (productId: number, variantId: number | null) => void;
+  updateQuantity: (productId: number, variantId: number | null, quantity: number) => void;
   clearCart: () => void;
 }
 
 export const useCartStore = create<CartState>()(
   persist(
     (set) => ({
-      currency: "PHP",
       items: [],
       addItem: (item) =>
         set((state) => {
-          const existingItem = state.items.find(
-            (entry) => entry.productId === item.productId
-          );
+          const existing = state.items.find((entry) => sameLine(entry, item));
 
-          if (!existingItem) {
+          if (!existing) {
             return { items: [...state.items, item] };
           }
 
           return {
             items: state.items.map((entry) =>
-              entry.productId === item.productId
-                ? { ...entry, quantity: entry.quantity + item.quantity }
-                : entry
+              sameLine(entry, item) ? { ...entry, quantity: Math.min(999, entry.quantity + item.quantity) } : entry
             ),
           };
         }),
-      removeItem: (productId) =>
+      removeItem: (productId, variantId) =>
         set((state) => ({
-          items: state.items.filter((entry) => entry.productId !== productId),
+          items: state.items.filter((entry) => !sameLine(entry, { productId, variantId })),
         })),
-      updateQuantity: (productId, quantity) =>
+      updateQuantity: (productId, variantId, quantity) =>
         set((state) => ({
           items: state.items.map((entry) =>
-            entry.productId === productId
-              ? { ...entry, quantity: Math.max(1, quantity) }
+            sameLine(entry, { productId, variantId })
+              ? { ...entry, quantity: Math.min(999, Math.max(1, quantity)) }
               : entry
           ),
         })),
-      replaceItems: ({ currency, items }) => set({ currency, items }),
       clearCart: () => set({ items: [] }),
     }),
     {
-      name: "sofiacart-cart",
+      name: "sofiacart-guest-cart",
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ items: state.items, currency: state.currency }),
+      partialize: (state) => ({ items: state.items }),
     }
   )
 );

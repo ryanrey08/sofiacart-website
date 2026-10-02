@@ -1,461 +1,368 @@
 "use client";
 
+import { AlertTriangle, ArrowLeft, Lock, LogIn, ShoppingBag, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useState, useEffect } from "react";
-import {
-  Minus,
-  Plus,
-  Trash2,
-  Heart,
-  ArrowLeft,
-  Lock,
-  Tag,
-  Truck,
-  ShieldCheck,
-  RotateCcw,
-  Headphones,
-  ShoppingBag,
-  Check,
-} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
+import { loginHref } from "@/components/auth/require-auth";
+import { CheckoutStepper } from "@/components/storefront/checkout-stepper";
+import { PopularProducts } from "@/components/storefront/home-sections";
+import { ProductImage } from "@/components/storefront/product-image";
+import { QuantityStepper } from "@/components/storefront/quantity-stepper";
+import { EmptyState, ErrorState, InlineError, ListSkeleton } from "@/components/storefront/states";
+import { AcceptedPayments, TrustBadges } from "@/components/storefront/trust-badges";
+import { VoucherInput } from "@/components/storefront/voucher-input";
+import { WishlistButton } from "@/components/storefront/wishlist-button";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { sampleCart } from "@/lib/mocks/storefront";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useCart, useClearCart, useRemoveCartItem, useUpdateCartItem } from "@/hooks/use-cart";
+import { useCheckoutSummary } from "@/hooks/use-checkout";
+import { errorMessage } from "@/lib/api/client";
 import { formatCurrency } from "@/lib/utils/format";
 import { useCartStore } from "@/stores/cart-store";
+import { useCheckoutStore } from "@/stores/checkout-store";
+import { toast } from "@/stores/toast-store";
+import type { Cart } from "@/types/domain";
 
-const RECOMMENDED_PRODUCTS = [
-  {
-    id: "rec-1",
-    name: "Sports Running Shoes for Men",
-    price: 3490,
-    image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&q=80&w=200",
-  },
-  {
-    id: "rec-2",
-    name: "Women's Handbag Premium Leather",
-    price: 2890,
-    image: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&q=80&w=200",
-  },
-  {
-    id: "rec-3",
-    name: "Bluetooth Headset over Ear",
-    price: 2990,
-    image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=200",
-  },
-  {
-    id: "rec-4",
-    name: "Ergonomic Office Chair",
-    price: 6490,
-    image: "https://images.unsplash.com/photo-1580481072645-022f9a6d83d0?auto=format&fit=crop&q=80&w=200",
-  },
-  {
-    id: "rec-5",
-    name: "Artificial Indoor Plant",
-    price: 890,
-    image: "https://images.unsplash.com/photo-1485955900006-10f4d324d411?auto=format&fit=crop&q=80&w=200",
-  },
-  {
-    id: "rec-6",
-    name: "Smart Watch Fitness Tracker",
-    price: 4290,
-    image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=200",
-  },
-];
+const tableHeader = (
+  <div className="hidden grid-cols-12 items-center border-b border-slate-100 pb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400 sm:grid">
+    <div className="col-span-5">Product</div>
+    <div className="col-span-2 text-center">Price</div>
+    <div className="col-span-2 text-center">Quantity</div>
+    <div className="col-span-2 text-right">Total</div>
+    <div className="col-span-1 text-right">Action</div>
+  </div>
+);
+
+function PageHeader({ count }: { count: number }) {
+  return (
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/10 text-brand">
+          <ShoppingBag className="h-5 w-5" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-black text-ink">Shopping Cart</h1>
+          <p className="text-xs text-slate-500">
+            {count} item{count === 1 ? "" : "s"} in your cart
+          </p>
+        </div>
+      </div>
+      <CheckoutStepper current="Cart" />
+    </div>
+  );
+}
 
 export function CartPageClient() {
+  const { hydrated, isAuthenticated, cart, guestItems, isLoading, error, refetch } = useCart();
+
+  if (!hydrated || isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-10 w-64" />
+        <div className="grid gap-6 lg:grid-cols-12">
+          <div className="lg:col-span-8"><ListSkeleton rows={3} /></div>
+          <Skeleton className="h-72 rounded-2xl lg:col-span-4" />
+        </div>
+      </div>
+    );
+  }
+
+  if (isAuthenticated && error) {
+    return <ErrorState error={error} onRetry={() => void refetch()} title="Your cart couldn't be loaded" />;
+  }
+
+  const itemCount = isAuthenticated ? (cart?.itemCount ?? 0) : guestItems.reduce((sum, item) => sum + item.quantity, 0);
+  const isEmpty = isAuthenticated ? !cart?.items.length : guestItems.length === 0;
+
+  return (
+    <div className="space-y-8">
+      <PageHeader count={itemCount} />
+      {isEmpty ? (
+        <EmptyState
+          icon={ShoppingBag}
+          title="Your cart is empty"
+          description="Browse products and add your favorites to the cart."
+          action={
+            <Button asChild className="rounded-full bg-brand">
+              <Link href="/products">Start Shopping</Link>
+            </Button>
+          }
+        />
+      ) : isAuthenticated && cart ? (
+        <ServerCart cart={cart} />
+      ) : (
+        <GuestCart />
+      )}
+      <PopularProducts title="You May Also Like" limit={6} />
+    </div>
+  );
+}
+
+function ServerCart({ cart }: { cart: Cart }) {
+  const router = useRouter();
+  const updateItem = useUpdateCartItem();
+  const removeItem = useRemoveCartItem();
+  const clearCart = useClearCart();
+  const voucherCode = useCheckoutStore((state) => state.voucherCode);
+  const setVoucherCode = useCheckoutStore((state) => state.setVoucherCode);
+  const setCartItemIds = useCheckoutStore((state) => state.setCartItemIds);
+
+  // null = every available line (the default); otherwise the ids the shopper picked.
+  const [picked, setPicked] = useState<Set<number> | null>(null);
+  const availableIds = cart.items.filter((item) => item.available).map((item) => item.id);
+  const selectedIds = availableIds.filter((id) => (picked ? picked.has(id) : true));
+  const allSelected = selectedIds.length === availableIds.length && availableIds.length > 0;
+
+  const summary = useCheckoutSummary({ cartItemIds: selectedIds, voucherCode }, selectedIds.length > 0);
+  const totals = selectedIds.length > 0 ? summary.data : undefined;
+
+  function toggle(id: number) {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setPicked(next);
+  }
+
+  function mutateItem(action: Promise<unknown>, failure: string) {
+    action.catch((mutationError) => toast.error(failure, errorMessage(mutationError)));
+  }
+
+  function proceed() {
+    setCartItemIds(allSelected ? null : selectedIds);
+    router.push("/checkout");
+  }
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-12">
+      <div className="space-y-4 lg:col-span-8">
+        <Card className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-6">
+          <div className="mb-1 flex items-center gap-3 pb-3">
+            <Checkbox
+              id="select-all"
+              checked={allSelected}
+              disabled={availableIds.length === 0}
+              onCheckedChange={() => setPicked(allSelected ? new Set() : null)}
+            />
+            <label htmlFor="select-all" className="cursor-pointer text-xs font-semibold text-slate-700">
+              Select All ({availableIds.length} item{availableIds.length === 1 ? "" : "s"})
+            </label>
+          </div>
+          {tableHeader}
+          <ul className="divide-y divide-slate-100">
+            {cart.items.map((item) => (
+              <li key={item.id} className="grid grid-cols-12 items-center gap-2 py-4 sm:gap-0">
+                <div className="col-span-12 flex items-center gap-3 sm:col-span-5">
+                  <Checkbox
+                    checked={selectedIds.includes(item.id)}
+                    disabled={!item.available}
+                    onCheckedChange={() => toggle(item.id)}
+                    aria-label={`Select ${item.name}`}
+                  />
+                  <ProductImage src={item.imageUrl} alt={item.name ?? "Product"} className="h-16 w-16 shrink-0 rounded-xl border border-slate-100 p-1" />
+                  <div className="min-w-0 space-y-0.5 pr-2">
+                    {item.slug ? (
+                      <Link href={`/products/${item.slug}`} className="line-clamp-1 text-xs font-bold text-ink hover:text-brand sm:text-sm">
+                        {item.name}
+                      </Link>
+                    ) : (
+                      <p className="line-clamp-1 text-xs font-bold text-ink sm:text-sm">{item.name ?? "Unavailable product"}</p>
+                    )}
+                    {item.store ? <p className="text-[10px] text-slate-400">Store: <span className="text-slate-600">{item.store.name}</span></p> : null}
+                    {item.variant?.label ? <p className="text-[10px] text-slate-400">Option: <span className="text-slate-600">{item.variant.label}</span></p> : null}
+                    {item.available ? (
+                      <span className="mt-1 inline-block rounded-md bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-600">In Stock</span>
+                    ) : (
+                      <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">
+                        <AlertTriangle className="h-3 w-3" /> {item.issue ?? "Unavailable"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="col-span-4 text-left text-xs font-bold text-ink sm:col-span-2 sm:text-center">
+                  {formatCurrency(item.unitPrice, item.currency)}
+                </div>
+                <div className="col-span-4 flex justify-center sm:col-span-2">
+                  <QuantityStepper
+                    value={item.quantity}
+                    max={Math.max(item.quantity, item.availableQuantity)}
+                    disabled={updateItem.isPending}
+                    onChange={(quantity) => mutateItem(updateItem.mutateAsync({ itemId: item.id, quantity }), "Quantity not updated")}
+                  />
+                </div>
+                <div className="col-span-4 text-right text-xs font-black text-ink sm:col-span-2">
+                  {formatCurrency(item.lineTotal, item.currency)}
+                </div>
+                <div className="col-span-12 flex items-center justify-end gap-3 sm:col-span-1">
+                  <WishlistButton productId={item.productId} />
+                  <button
+                    type="button"
+                    onClick={() => mutateItem(removeItem.mutateAsync(item.id), "Item not removed")}
+                    disabled={removeItem.isPending}
+                    className="text-slate-400 transition-colors hover:text-red-500 disabled:opacity-40"
+                    aria-label={`Remove ${item.name}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+
+        <div className="flex items-center justify-between">
+          <Button asChild variant="outline" className="rounded-full border-slate-200 text-xs font-bold text-brand">
+            <Link href="/products">
+              <ArrowLeft className="h-3.5 w-3.5" /> Continue Shopping
+            </Link>
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={clearCart.isPending}
+            onClick={() => {
+              if (window.confirm("Remove every item from your cart?")) {
+                mutateItem(clearCart.mutateAsync(), "Cart not cleared");
+              }
+            }}
+            className="text-xs font-semibold text-slate-400 hover:text-red-500"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> Clear Cart
+          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-4 lg:col-span-4">
+        <Card className="space-y-4 rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-black text-ink">Order Summary</h2>
+          {selectedIds.length === 0 ? (
+            <p className="text-xs text-slate-500">Select the items you want to check out.</p>
+          ) : summary.isPending ? (
+            <div className="space-y-2"><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-full" /><Skeleton className="h-8 w-full" /></div>
+          ) : summary.isError ? (
+            <InlineError error={summary.error} />
+          ) : totals ? (
+            <>
+              <div className={`space-y-2.5 text-xs text-slate-600 ${summary.isFetching ? "opacity-60" : ""}`}>
+                <div className="flex justify-between">
+                  <span>Subtotal ({totals.orders.reduce((sum, group) => sum + group.items.reduce((count, line) => count + line.quantity, 0), 0)} items)</span>
+                  <span className="font-bold text-ink">{formatCurrency(totals.subtotal, totals.currency)}</span>
+                </div>
+                {totals.discount > 0 ? (
+                  <div className="flex justify-between font-semibold text-emerald-600">
+                    <span>Discount{totals.voucher ? ` (${totals.voucher.code})` : ""}</span>
+                    <span>-{formatCurrency(totals.discount, totals.currency)}</span>
+                  </div>
+                ) : null}
+                <div className="flex justify-between">
+                  <span>Shipping Fee</span>
+                  <span className="text-slate-400">Calculated at checkout</span>
+                </div>
+              </div>
+              <Separator className="bg-slate-100" />
+              <div className="flex items-baseline justify-between">
+                <span className="text-sm font-bold text-ink">Total</span>
+                <div className="text-right">
+                  <span className="text-xl font-black text-ink">{formatCurrency(totals.total, totals.currency)}</span>
+                  <p className="text-[9px] text-slate-400">Inclusive of VAT (if applicable)</p>
+                </div>
+              </div>
+            </>
+          ) : null}
+
+          <Button
+            onClick={proceed}
+            disabled={selectedIds.length === 0 || summary.isError || summary.isPending}
+            className="h-11 w-full rounded-full bg-cta text-xs font-bold text-white shadow-md hover:opacity-95"
+          >
+            <Lock className="h-4 w-4" /> Proceed to Checkout →
+          </Button>
+
+          <VoucherInput
+            appliedCode={voucherCode}
+            cartItemIds={selectedIds}
+            onApply={(code) => {
+              setVoucherCode(code);
+              toast.success("Promo code applied", code);
+            }}
+            onRemove={() => setVoucherCode(null)}
+          />
+        </Card>
+        <TrustBadges />
+        <AcceptedPayments />
+      </div>
+    </div>
+  );
+}
+
+function GuestCart() {
   const items = useCartStore((state) => state.items);
-  const currency = useCartStore((state) => state.currency);
-  const replaceItems = useCartStore((state) => state.replaceItems);
   const updateQuantity = useCartStore((state) => state.updateQuantity);
   const removeItem = useCartStore((state) => state.removeItem);
   const clearCart = useCartStore((state) => state.clearCart);
 
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
-  const [promoCode, setPromoCode] = useState("");
-
-  useEffect(() => {
-    if (items.length === 0) {
-      replaceItems({ currency: sampleCart.currency, items: sampleCart.items });
-    }
-  }, [items.length, replaceItems]);
-
-  useEffect(() => {
-    setSelectedItems(items.map((i) => i.productId));
-  }, [items]);
-
-  const toggleSelectAll = () => {
-    if (selectedItems.length === items.length) {
-      setSelectedItems([]);
-    } else {
-      setSelectedItems(items.map((i) => i.productId));
-    }
-  };
-
-  const toggleSelectItem = (id: string) => {
-    if (selectedItems.includes(id)) {
-      setSelectedItems(selectedItems.filter((item) => item !== id));
-    } else {
-      setSelectedItems([...selectedItems, id]);
-    }
-  };
-
-  const selectedCartItems = items.filter((item) => selectedItems.includes(item.productId));
-  const subtotal = selectedCartItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  const discount = subtotal > 0 ? 1000 : 0;
-  const shipping = 0; // Free shipping
-  const total = Math.max(0, subtotal - discount + shipping);
-
   return (
-    <div className="space-y-8 py-4">
-      {/* Top Section Header & Stepper */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#5B3DF5]/10 text-[#5B3DF5]">
-            <ShoppingBag className="h-5 w-5" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black text-[#1E1B4B]">Shopping Cart</h1>
-            <p className="text-xs text-slate-500">{items.length} items in your cart</p>
-          </div>
-        </div>
-
-        {/* Checkout Stepper */}
-        <div className="flex items-center gap-2 text-xs font-semibold">
-          <div className="flex items-center gap-1.5 text-[#5B3DF5]">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#5B3DF5] text-[11px] font-bold text-white">
-              1
-            </span>
-            <span>Cart</span>
-          </div>
-          <span className="text-slate-300">—</span>
-          <div className="flex items-center gap-1.5 text-slate-400">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-[11px] font-bold text-slate-600">
-              2
-            </span>
-            <span>Checkout</span>
-          </div>
-          <span className="text-slate-300">—</span>
-          <div className="flex items-center gap-1.5 text-slate-400">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-[11px] font-bold text-slate-600">
-              3
-            </span>
-            <span>Payment</span>
-          </div>
-          <span className="text-slate-300">—</span>
-          <div className="flex items-center gap-1.5 text-slate-400">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-[11px] font-bold text-slate-600">
-              4
-            </span>
-            <span>Order Complete</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content Grid */}
-      <div className="grid gap-6 lg:grid-cols-12">
-        {/* LEFT COLUMN: Cart Table (8 Cols) */}
-        <div className="lg:col-span-8 space-y-4">
-          <Card className="rounded-2xl border border-slate-100 bg-white p-4 sm:p-6 shadow-sm">
-            {/* Table Header Controls */}
-            <div className="grid grid-cols-12 items-center text-[11px] font-bold text-slate-400 uppercase tracking-wider pb-4 border-b border-slate-100">
-              <div className="col-span-6 flex items-center gap-3">
-                <Checkbox
-                  checked={selectedItems.length === items.length && items.length > 0}
-                  onCheckedChange={toggleSelectAll}
-                  className="rounded border-slate-300 data-[state=checked]:bg-[#5B3DF5] data-[state=checked]:border-[#5B3DF5]"
-                />
-                <span className="capitalize text-slate-700 text-xs">
-                  Select All ({items.length} items)
-                </span>
-              </div>
-              <div className="col-span-2 text-center hidden sm:block">Price</div>
-              <div className="col-span-2 text-center hidden sm:block">Quantity</div>
-              <div className="col-span-1 text-right hidden sm:block">Total</div>
-              <div className="col-span-1 text-right hidden sm:block">Action</div>
-            </div>
-
-            {/* Cart Items List */}
-            <CardContent className="p-0 divide-y divide-slate-100">
-              {items.length === 0 ? (
-                <div className="py-12 text-center text-sm text-slate-400">
-                  Your cart is empty.
-                </div>
-              ) : (
-                items.map((item) => (
-                  <div key={item.productId} className="grid grid-cols-12 items-center py-4 gap-2 sm:gap-0">
-                    {/* Checkbox + Product Info */}
-                    <div className="col-span-12 sm:col-span-6 flex items-center gap-3">
-                      <Checkbox
-                        checked={selectedItems.includes(item.productId)}
-                        onCheckedChange={() => toggleSelectItem(item.productId)}
-                        className="rounded border-slate-300 data-[state=checked]:bg-[#5B3DF5] data-[state=checked]:border-[#5B3DF5]"
-                      />
-                      <div className="h-16 w-16 shrink-0 rounded-xl bg-slate-100 border border-slate-100 overflow-hidden flex items-center justify-center p-1">
-                        <img
-                          src={item.image || "/assets/placeholder-product.png"}
-                          alt={item.name}
-                          className="h-full w-full object-contain"
-                        />
-                      </div>
-                      <div className="space-y-0.5 pr-2">
-                        <h3 className="text-xs sm:text-sm font-bold text-[#1E1B4B] line-clamp-1">
-                          {item.name}
-                        </h3>
-                        <p className="text-[10px] text-slate-400">
-                          Brand: <span className="text-slate-600">Generic</span>
-                        </p>
-                        <p className="text-[10px] text-slate-400">
-                          Storage: <span className="text-slate-600">Default</span>
-                        </p>
-                        <span className="inline-block rounded-md bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-600 mt-1">
-                          In Stock
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Unit Price */}
-                    <div className="col-span-4 sm:col-span-2 text-left sm:text-center">
-                      <span className="text-xs font-bold text-[#1E1B4B]">
-                        {formatCurrency(item.unitPrice, currency)}
-                      </span>
-                    </div>
-
-                    {/* Quantity Selector */}
-                    <div className="col-span-4 sm:col-span-2 flex justify-center">
-                      <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50/50 p-1">
-                        <button
-                          onClick={() => updateQuantity(item.productId, item.quantity - 1)}
-                          className="flex h-5 w-5 items-center justify-center text-slate-500 hover:text-slate-800"
-                        >
-                          <Minus className="h-3 w-3" />
-                        </button>
-                        <span className="w-7 text-center text-xs font-bold text-slate-800">
-                          {item.quantity}
-                        </span>
-                        <button
-                          onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                          className="flex h-5 w-5 items-center justify-center text-slate-500 hover:text-slate-800"
-                        >
-                          <Plus className="h-3 w-3" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Total Price */}
-                    <div className="col-span-4 sm:col-span-1 text-right">
-                      <span className="text-xs font-black text-[#1E1B4B]">
-                        {formatCurrency(item.unitPrice * item.quantity, currency)}
-                      </span>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="col-span-12 sm:col-span-1 flex items-center justify-end gap-2 pt-2 sm:pt-0">
-                      <button
-                        type="button"
-                        className="text-slate-400 hover:text-pink-500 transition-colors"
-                        title="Add to wishlist"
-                      >
-                        <Heart className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeItem(item.productId)}
-                        className="text-slate-400 hover:text-red-500 transition-colors"
-                        title="Remove item"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
+    <div className="grid gap-6 lg:grid-cols-12">
+      <div className="space-y-4 lg:col-span-8">
+        <Card className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm sm:p-6">
+          {tableHeader}
+          <ul className="divide-y divide-slate-100">
+            {items.map((item) => (
+              <li key={`${item.productId}-${item.variantId ?? "base"}`} className="grid grid-cols-12 items-center gap-2 py-4 sm:gap-0">
+                <div className="col-span-12 flex items-center gap-3 sm:col-span-5">
+                  <ProductImage src={item.imageUrl} alt={item.name} className="h-16 w-16 shrink-0 rounded-xl border border-slate-100 p-1" />
+                  <div className="min-w-0 space-y-0.5">
+                    <Link href={`/products/${item.slug}`} className="line-clamp-1 text-xs font-bold text-ink hover:text-brand sm:text-sm">
+                      {item.name}
+                    </Link>
+                    {item.variantLabel ? <p className="text-[10px] text-slate-400">Option: <span className="text-slate-600">{item.variantLabel}</span></p> : null}
                   </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Bottom Actions */}
-          <div className="flex items-center justify-between">
-            <Button
-              asChild
-              variant="outline"
-              className="rounded-full border-slate-200 text-xs font-bold text-[#5B3DF5] hover:bg-slate-50"
-            >
-              <Link href="/">
-                <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Continue Shopping
-              </Link>
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={clearCart}
-              className="text-xs font-semibold text-slate-400 hover:text-red-500"
-            >
-              <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Clear Cart
-            </Button>
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN: Order Summary & Checkout Sidebar (4 Cols) */}
-        <div className="lg:col-span-4 space-y-4">
-          <Card className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm space-y-4">
-            <h2 className="text-lg font-black text-[#1E1B4B]">Order Summary</h2>
-
-            <div className="space-y-2.5 text-xs text-slate-600">
-              <div className="flex justify-between">
-                <span>Subtotal ({selectedCartItems.length} items)</span>
-                <span className="font-bold text-[#1E1B4B]">
-                  {formatCurrency(subtotal, currency)}
-                </span>
-              </div>
-              <div className="flex justify-between text-emerald-600 font-semibold">
-                <span>Discount</span>
-                <span>-{formatCurrency(discount, currency)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Shipping Fee</span>
-                <span className="font-bold text-[#1E1B4B]">
-                  {shipping === 0 ? "₱ 0.00" : formatCurrency(shipping, currency)}
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-400">
-                Free shipping for orders ₱ 1,000 and above.
-              </p>
-            </div>
-
-            <Separator className="bg-slate-100" />
-
-            <div className="flex items-baseline justify-between">
-              <span className="text-sm font-bold text-[#1E1B4B]">Total</span>
-              <div className="text-right">
-                <span className="text-xl font-black text-[#1E1B4B]">
-                  {formatCurrency(total, currency)}
-                </span>
-                <p className="text-[9px] text-slate-400">Inclusive of VAT (if applicable)</p>
-              </div>
-            </div>
-
-            {/* Proceed to Checkout Button */}
-            <Button
-              asChild
-              className="w-full h-11 rounded-full bg-gradient-to-r from-[#FF6B00] via-[#FF2A7A] to-[#FF2A7A] text-xs font-bold text-white shadow-md hover:opacity-95"
-            >
-              <Link href="/checkout" className="flex items-center justify-center gap-2">
-                <Lock className="h-4 w-4" /> Proceed to Checkout →
-              </Link>
-            </Button>
-
-            {/* Promo Code Box */}
-            <div className="pt-2 space-y-2">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#5B3DF5]">
-                <Tag className="h-3.5 w-3.5" /> Have a Promo Code?
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Enter promo code"
-                  value={promoCode}
-                  onChange={(e) => setPromoCode(e.target.value)}
-                  className="h-9 rounded-xl border-slate-200 text-xs focus-visible:ring-[#5B3DF5]"
-                />
-                <Button className="h-9 rounded-xl bg-[#5B3DF5] px-4 text-xs font-bold text-white hover:bg-[#482bd9]">
-                  Apply
-                </Button>
-              </div>
-            </div>
-          </Card>
-
-          {/* Guarantee Badges */}
-          <div className="grid grid-cols-4 gap-2 rounded-2xl bg-white p-4 border border-slate-100 shadow-sm text-center">
-            <div className="flex flex-col items-center">
-              <Truck className="h-4 w-4 text-[#5B3DF5] mb-1" />
-              <span className="text-[10px] font-bold text-slate-800">Free Shipping</span>
-              <span className="text-[8px] text-slate-400">for orders ₱1,000+</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <ShieldCheck className="h-4 w-4 text-[#5B3DF5] mb-1" />
-              <span className="text-[10px] font-bold text-slate-800">Secure Payment</span>
-              <span className="text-[8px] text-slate-400">100% protected</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <RotateCcw className="h-4 w-4 text-[#5B3DF5] mb-1" />
-              <span className="text-[10px] font-bold text-slate-800">Easy Returns</span>
-              <span className="text-[8px] text-slate-400">7-day returns</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <Headphones className="h-4 w-4 text-[#5B3DF5] mb-1" />
-              <span className="text-[10px] font-bold text-slate-800">Customer Support</span>
-              <span className="text-[8px] text-slate-400">We're here to help</span>
-            </div>
-          </div>
-
-          {/* Payment Method Badges */}
-          <div className="rounded-2xl bg-white p-4 border border-slate-100 shadow-sm space-y-2">
-            <p className="text-xs font-bold text-[#1E1B4B]">We Accept</p>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="rounded bg-slate-100 px-2 py-1 text-[9px] font-bold text-blue-700">
-                VISA
-              </span>
-              <span className="rounded bg-slate-100 px-2 py-1 text-[9px] font-bold text-orange-600">
-                mastercard
-              </span>
-              <span className="rounded bg-blue-600 px-2 py-1 text-[9px] font-bold text-white">
-                GCash
-              </span>
-              <span className="rounded bg-emerald-600 px-2 py-1 text-[9px] font-bold text-white">
-                maya
-              </span>
-              <span className="rounded bg-blue-900 px-2 py-1 text-[9px] font-bold text-white">
-                BDO
-              </span>
-              <span className="rounded bg-red-700 px-2 py-1 text-[9px] font-bold text-white">
-                BPI
-              </span>
-              <span className="rounded bg-slate-200 px-2 py-1 text-[9px] font-bold text-slate-700">
-                Cash on Delivery
-              </span>
-            </div>
-          </div>
+                </div>
+                <div className="col-span-4 text-left text-xs font-bold text-ink sm:col-span-2 sm:text-center">
+                  {formatCurrency(item.displayPrice, item.currency)}
+                </div>
+                <div className="col-span-4 flex justify-center sm:col-span-2">
+                  <QuantityStepper value={item.quantity} onChange={(quantity) => updateQuantity(item.productId, item.variantId, quantity)} />
+                </div>
+                <div className="col-span-3 text-right text-[10px] text-slate-400 sm:col-span-2">At checkout</div>
+                <div className="col-span-1 flex justify-end">
+                  <button type="button" onClick={() => removeItem(item.productId, item.variantId)} className="text-slate-400 hover:text-red-500" aria-label={`Remove ${item.name}`}>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+        <div className="flex items-center justify-between">
+          <Button asChild variant="outline" className="rounded-full border-slate-200 text-xs font-bold text-brand">
+            <Link href="/products"><ArrowLeft className="h-3.5 w-3.5" /> Continue Shopping</Link>
+          </Button>
+          <Button variant="ghost" onClick={clearCart} className="text-xs font-semibold text-slate-400 hover:text-red-500">
+            <Trash2 className="h-3.5 w-3.5" /> Clear Cart
+          </Button>
         </div>
       </div>
-
-      {/* BOTTOM SECTION: "You May Also Like" Carousel/Grid */}
-      <div className="pt-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-black text-[#1E1B4B]">You May Also Like</h2>
-          <Link href="/products" className="text-xs font-bold text-[#5B3DF5] hover:underline">
-            View All Products →
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
-          {RECOMMENDED_PRODUCTS.map((prod) => (
-            <Card
-              key={prod.id}
-              className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm hover:shadow-md transition-shadow space-y-2"
-            >
-              <div className="h-28 w-full rounded-xl bg-slate-50 border border-slate-100 overflow-hidden flex items-center justify-center p-2">
-                <img
-                  src={prod.image}
-                  alt={prod.name}
-                  className="h-full w-full object-contain"
-                />
-              </div>
-              <h4 className="text-xs font-bold text-[#1E1B4B] line-clamp-2 h-8">
-                {prod.name}
-              </h4>
-              <p className="text-xs font-black text-[#1E1B4B]">
-                {formatCurrency(prod.price, currency)}
-              </p>
-              <Button
-                variant="outline"
-                className="w-full h-8 rounded-xl border-[#5B3DF5] text-[10px] font-bold text-[#5B3DF5] hover:bg-[#5B3DF5] hover:text-white transition-colors"
-              >
-                <ShoppingBag className="mr-1 h-3 w-3" /> Add to Cart
-              </Button>
-            </Card>
-          ))}
-        </div>
+      <div className="space-y-4 lg:col-span-4">
+        <Card className="space-y-4 rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-black text-ink">Order Summary</h2>
+          <p className="text-xs text-slate-500">
+            Sign in to see your total. Prices, stock and discounts are confirmed by the store when your cart moves to your account.
+          </p>
+          <Button asChild className="h-11 w-full rounded-full bg-cta text-xs font-bold text-white shadow-md hover:opacity-95">
+            <Link href={loginHref("/cart")}>
+              <LogIn className="h-4 w-4" /> Sign In to Checkout
+            </Link>
+          </Button>
+          <p className="text-center text-[11px] text-slate-500">
+            New here? <Link href="/register?redirect=%2Fcart" className="font-bold text-brand hover:underline">Create an account</Link>
+          </p>
+        </Card>
+        <TrustBadges />
+        <AcceptedPayments />
       </div>
     </div>
   );

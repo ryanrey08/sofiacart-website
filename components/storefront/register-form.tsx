@@ -4,6 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   User,
   Mail,
@@ -35,14 +37,23 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { InlineError } from "@/components/storefront/states";
+import { useRegister } from "@/hooks/use-auth";
+import { useSession } from "@/hooks/use-session";
+import { ApiClientError } from "@/lib/api/client";
+import { safeRedirect } from "@/lib/utils/redirect";
+import { toast } from "@/stores/toast-store";
 
 const registerSchema = z
   .object({
     firstName: z.string().min(2, "Enter at least 2 characters."),
     lastName: z.string().min(2, "Enter at least 2 characters."),
     email: z.string().email("Enter a valid email address."),
-    phonePrefix: z.string().default("+63"),
-    phone: z.string().min(10, "Enter a valid mobile number."),
+    phonePrefix: z.string(),
+    phone: z
+      .string()
+      .trim()
+      .regex(/^[0-9()\-\s]{7,16}$/, "Enter a valid mobile number, e.g. 912 345 6789."),
     password: z.string().min(8, "Use at least 8 characters."),
     passwordConfirmation: z.string().min(8, "Please confirm your password."),
     addressLine1: z.string().min(4, "Enter your street address."),
@@ -75,16 +86,83 @@ const defaultValues: RegisterValues = {
   acceptTerms: false,
 };
 
+/** Backend validation keys (RegisterRequest) → form fields. */
+const serverFieldMap: Record<string, keyof RegisterValues> = {
+  name: "firstName",
+  firstName: "firstName",
+  lastName: "lastName",
+  email: "email",
+  phone: "phone",
+  password: "password",
+  passwordConfirmation: "passwordConfirmation",
+  "shippingAddress.phone": "phone",
+  "shippingAddress.line1": "addressLine1",
+  "shippingAddress.line2": "addressLine2",
+  "shippingAddress.city": "city",
+  "shippingAddress.state": "province",
+  "shippingAddress.postalCode": "postalCode",
+};
+
 export function RegisterForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [submittedName, setSubmittedName] = useState<string | null>(null);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = safeRedirect(searchParams.get("redirect"), "/account");
+  const { hydrated, isAuthenticated } = useSession();
+  const register = useRegister();
 
   const form = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
     defaultValues,
     mode: "onBlur",
   });
+
+  useEffect(() => {
+    if (hydrated && isAuthenticated && !register.isPending && !register.isSuccess) {
+      router.replace(redirectTo);
+    }
+  }, [hydrated, isAuthenticated, redirectTo, register.isPending, register.isSuccess, router]);
+
+  function onSubmit(values: RegisterValues) {
+    const phone = `${values.phonePrefix} ${values.phone.trim()}`;
+    const recipientName = `${values.firstName.trim()} ${values.lastName.trim()}`;
+
+    register.mutate(
+      {
+        firstName: values.firstName.trim(),
+        lastName: values.lastName.trim(),
+        email: values.email.trim(),
+        phone,
+        password: values.password,
+        passwordConfirmation: values.passwordConfirmation,
+        shippingAddress: {
+          label: "Home",
+          recipientName,
+          phone,
+          line1: values.addressLine1.trim(),
+          line2: values.addressLine2?.trim() || null,
+          city: values.city.trim(),
+          state: values.province.trim(),
+          postalCode: values.postalCode.trim(),
+        },
+      },
+      {
+        onSuccess: ({ user }) => {
+          toast.success(`Welcome to SofiaCart, ${user.name.split(" ")[0]}!`, "We sent a verification link to your email.");
+          router.replace(redirectTo);
+        },
+        onError: (error) => {
+          if (error instanceof ApiClientError && error.errors) {
+            for (const [key, messages] of Object.entries(error.errors)) {
+              const field = serverFieldMap[key];
+              if (field) form.setError(field, { type: "server", message: messages[0] });
+            }
+          }
+        },
+      }
+    );
+  }
 
   return (
     <div className="grid gap-8 lg:grid-cols-12 min-h-[calc(100vh-6rem)] py-4">
@@ -156,7 +234,7 @@ export function RegisterForm() {
                         </FormLabel>
                         <FormControl>
                           <div className="relative">
-                            <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                            <User className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                             <Input
                               placeholder="Dela Cruz"
                               className="h-10 pl-9 rounded-xl border-slate-200 bg-slate-50/50 text-xs focus-visible:ring-[#5B3DF5]"
@@ -304,7 +382,7 @@ export function RegisterForm() {
                   />
                 </div>
                 <p className="text-[10px] text-slate-400">
-                  Password must be at least 8 characters with a combination of letters, numbers, and symbols.
+                  Password must be at least 8 characters. A mix of letters, numbers and symbols is stronger.
                 </p>
               </div>
 
@@ -448,62 +526,25 @@ export function RegisterForm() {
                       />
                     </FormControl>
                     <label className="text-xs text-slate-600 leading-none">
-                      I agree to the{" "}
-                      <Link href="/terms" className="font-semibold text-[#5B3DF5] underline">
-                        Terms and Conditions
-                      </Link>{" "}
-                      and{" "}
-                      <Link href="/privacy" className="font-semibold text-[#5B3DF5] underline">
-                        Privacy Policy
-                      </Link>{" "}
-                      of SofiaCart.
+                      I agree to the <span className="font-semibold text-[#5B3DF5]">Terms and Conditions</span> and{" "}
+                      <span className="font-semibold text-[#5B3DF5]">Privacy Policy</span> of SofiaCart.
                     </label>
                   </FormItem>
                 )}
               />
 
+              {register.isError && !(register.error instanceof ApiClientError && register.error.status === 422) ? (
+                <InlineError error={register.error} />
+              ) : null}
+
               {/* Submit Button */}
               <Button
                 type="submit"
+                disabled={register.isPending}
                 className="w-full h-11 rounded-full bg-gradient-to-r from-[#FF6B00] via-[#FF2A7A] to-[#FF2A7A] text-sm font-bold text-white shadow-md hover:opacity-95"
               >
-                Create Account
+                {register.isPending ? "Creating your account…" : "Create Account"}
               </Button>
-
-              {/* Social Login Separator */}
-              <div className="relative flex items-center justify-center my-4">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-200" />
-                </div>
-                <span className="relative bg-white px-3 text-[10px] text-slate-400">
-                  or register with
-                </span>
-              </div>
-
-              {/* Social Auth Buttons */}
-              <div className="grid grid-cols-3 gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 rounded-xl border-slate-200 bg-white text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  <span className="mr-1.5 font-bold text-blue-500">G</span> Continue with Google
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 rounded-xl border-slate-200 bg-white text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  <span className="mr-1.5 font-bold text-blue-600">f</span> Continue with Facebook
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 rounded-xl border-slate-200 bg-white text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  <span className="mr-1.5 font-bold text-black"></span> Continue with Apple
-                </Button>
-              </div>
             </form>
           </Form>
         </CardContent>
@@ -525,12 +566,8 @@ export function RegisterForm() {
             </p>
           </div>
 
-          {/* 3D Bag Illustration */}
-          <img
-            src="/assets/illustrations/welcome-shopping-bag.png"
-            alt="Welcome to SofiaCart"
-            className="absolute right-2 bottom-0 h-60 w-auto object-contain drop-shadow-xl pointer-events-none"
-          />
+          {/* Bag illustration */}
+          <ShoppingBag aria-hidden className="pointer-events-none absolute -bottom-6 -right-4 h-48 w-48 rotate-12 text-[#5B3DF5]/10" />
         </div>
 
         {/* Feature Cards Grid (2x2) */}
@@ -551,7 +588,7 @@ export function RegisterForm() {
             </div>
             <div>
               <h4 className="text-xs font-bold text-[#110C3B]">Track Your Orders</h4>
-              <p className="text-[10px] text-slate-500">Get real-time updates on your deliveries.</p>
+              <p className="text-[10px] text-slate-500">Follow every order from placement to completion.</p>
             </div>
           </div>
 
@@ -571,7 +608,7 @@ export function RegisterForm() {
             </div>
             <div>
               <h4 className="text-xs font-bold text-[#110C3B]">Manage Your Account</h4>
-              <p className="text-[10px] text-slate-500">Update your profile, addresses and payment methods.</p>
+              <p className="text-[10px] text-slate-500">Update your profile, addresses and preferences.</p>
             </div>
           </div>
         </div>
@@ -587,7 +624,7 @@ export function RegisterForm() {
           <div className="flex flex-col items-center text-center">
             <Headphones className="h-5 w-5 text-slate-700 mb-1" />
             <span className="text-[11px] font-bold text-slate-800">Customer Support</span>
-            <span className="text-[9px] text-slate-400">We're here to help.</span>
+            <span className="text-[9px] text-slate-400">We&apos;re here to help.</span>
           </div>
 
           <div className="flex flex-col items-center text-center">
