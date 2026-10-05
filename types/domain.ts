@@ -269,7 +269,7 @@ export interface PlaceOrderRequest extends CheckoutSummaryRequest {
   notes?: string | null;
 }
 
-export type OrderStatus = "pending" | "processing" | "completed" | "cancelled";
+export type OrderStatus = "pending" | "processing" | "out_for_delivery" | "completed" | "cancelled";
 
 export type OrderPaymentStatus =
   | "unpaid"

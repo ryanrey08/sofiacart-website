@@ -15,6 +15,7 @@ const tones: Record<Tone, string> = {
 export const orderStatusLabel: Record<OrderStatus, string> = {
   pending: "Pending",
   processing: "Processing",
+  out_for_delivery: "Out for Delivery",
   completed: "Completed",
   cancelled: "Cancelled",
 };
@@ -22,6 +23,7 @@ export const orderStatusLabel: Record<OrderStatus, string> = {
 const orderTone: Record<OrderStatus, Tone> = {
   pending: "amber",
   processing: "blue",
+  out_for_delivery: "purple",
   completed: "green",
   cancelled: "slate",
 };

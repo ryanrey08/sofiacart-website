@@ -1,4 +1,4 @@
-import { Ban, Check, ClipboardCheck, Package, PackageCheck } from "lucide-react";
+import { Ban, Check, ClipboardCheck, Package, PackageCheck, Truck } from "lucide-react";
 import { Fragment } from "react";
 
 import { cn } from "@/lib/utils";
@@ -7,11 +7,12 @@ import type { Order } from "@/types/domain";
 
 /**
  * Order progress from the backend's order status. The shared schema has no shipment tracking, so
- * the steps are the statuses that exist: pending → processing → completed (or cancelled).
+ * the steps are the statuses that exist: pending → processing → out_for_delivery → completed (or cancelled).
  */
 const steps = [
   { key: "pending", label: "Order Placed", icon: ClipboardCheck },
   { key: "processing", label: "Processing", icon: Package },
+  { key: "out_for_delivery", label: "Out for Delivery", icon: Truck },
   { key: "completed", label: "Completed", icon: PackageCheck },
 ] as const;
 
@@ -38,7 +39,7 @@ export function OrderTracker({ order, compact = false }: { order: Pick<Order, "s
         return (
           <Fragment key={step.key}>
             {index > 0 ? <li aria-hidden className={cn("mt-4 h-0.5 flex-1", reached ? "bg-brand" : "bg-slate-200")} /> : null}
-            <li className="flex w-20 flex-col items-center gap-1 text-center" aria-current={index === current ? "step" : undefined}>
+            <li className="flex w-14 flex-col items-center gap-1 text-center sm:w-16" aria-current={index === current ? "step" : undefined}>
               <span className={cn("flex h-8 w-8 items-center justify-center rounded-full", reached ? "bg-brand text-white" : "border-2 border-slate-200 text-slate-300")}>
                 <Icon className="h-4 w-4" />
               </span>

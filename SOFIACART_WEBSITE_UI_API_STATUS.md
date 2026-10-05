@@ -98,8 +98,8 @@ The TypeScript types in `types/domain.ts` mirror those resources field for field
 
 | Canva screen / feature | Frontend page / component | Backend endpoint | Integration | UI | Missing backend API / blockers | Remaining work |
 | --- | --- | --- | --- | --- | --- | --- |
-| My Orders: sidebar, status tabs, order cards, detail panel | `app/account/orders/page.tsx`, `components/orders/my-orders.tsx`, `order-detail.tsx` | `GET /account/orders?status=&page=&per_page=`, `GET /account/orders/{n}` | ✅ list, tabs, detail panel (≥1280 px), mobile cards | ✅ Canva layout | **Tabs "Pending Payment", "Shipped", "Delivered": the schema has no shipment statuses and the API has no payment-status filter.** The tabs show real statuses instead: All, Pending, Processing, Completed, Cancelled. **"Search by order number or product" and the date filter: no API parameters, so they were not built.** | Shipment status, `payment_status`, search and date filters in the API |
-| Order details, order status, "Track Order" | `app/account/orders/[orderNumber]/page.tsx` | `GET /account/orders/{n}` (refresh button refetches) | ✅ | ✅ | **Tracking: no shipment or courier API.** The tracker shows the order statuses Placed → Processing → Completed (or Cancelled). | Shipment API |
+| My Orders: sidebar, status tabs, order cards, detail panel | `app/account/orders/page.tsx`, `components/orders/my-orders.tsx`, `order-detail.tsx` | `GET /account/orders?status=&page=&per_page=`, `GET /account/orders/{n}` | ✅ list, tabs, detail panel (≥1280 px), mobile cards | ✅ Canva layout | **Tabs "Pending Payment", "Shipped", "Delivered": the schema has no shipment statuses and the API has no payment-status filter.** The tabs show real statuses instead: All, Pending, Processing, Out for Delivery, Completed, Cancelled. **"Search by order number or product" and the date filter: no API parameters, so they were not built.** | Shipment status, `payment_status`, search and date filters in the API |
+| Order details, order status, "Track Order" | `app/account/orders/[orderNumber]/page.tsx` | `GET /account/orders/{n}` (refresh button refetches) | ✅ | ✅ | **Tracking: no shipment or courier API.** The tracker shows the order statuses Placed → Processing → Out for Delivery → Completed (or Cancelled). | Shipment API |
 | Cancellation | `components/orders/cancel-order-dialog.tsx` | `POST /account/orders/{n}/cancel` (`canCancel`) | ✅ order and payment cancelled, notification created | ✅ | — | — |
 | "Contact Seller" | — | — | ❌ | Not shown | No messaging or support API | Messaging API |
 | Return / refund request | `app/account/orders/[orderNumber]/return/page.tsx`, `components/orders/return-request-form.tsx` | `GET /account/orders/{n}/returnable`, `POST /account/orders/{n}/returns` | ✅ ineligible state. 🟡 submit: needs a completed, paid order (set by the merchant). | ✅ | No evidence or photo upload (needs shared storage) | Verify after completing an order |
@@ -203,7 +203,8 @@ There is no account-deletion API to remove them.
 
 1. **Product images return 403** from sofiacart-backend's public storage (`MEDIA_URL`). This is a deployment fix in sofiacart-backend.
 2. **Shipment tracking** is missing:
-   - No Shipped or Delivered statuses.
+   - No separate Shipped status. `out_for_delivery` was added on 2026-10-05 (section 7). "Delivered" is the existing `completed`.
+   - No status history, so the tracker can't show a timestamp for each step.
    - No courier tracking.
    - No payment-status or search/date filters on `/account/orders`.
 3. **No payment gateway, saved payment methods or billing address.** Payments are manual and verified by the merchant.
@@ -265,3 +266,23 @@ There is no account-deletion API to remove them.
 - `README.md`: updated.
 - `SOFIACART_WEBSITE_API_INTEGRATION_STATUS.md`: marked superseded.
 - This file.
+
+---
+
+## 7. Order status: Out for Delivery (2026-10-05)
+
+- **Status:** `out_for_delivery`, shown as "Out for Delivery". It is the value of the shared `orders.status` column, owned by `sofiacart-backend`, which also enforces the lifecycle: `pending → processing → out_for_delivery → completed`. `pending` and `processing` can also go to `cancelled`. `out_for_delivery` can only go to `completed`, and `completed` still needs a paid order.
+- **Frontend changes:**
+  - `types/domain.ts`: `OrderStatus` includes `out_for_delivery`.
+  - `components/storefront/status-badge.tsx`: label "Out for Delivery". It uses the existing `purple` (brand) tone so it looks different from Processing (blue) and Completed (green).
+  - `components/orders/order-tracker.tsx`: new step with a truck icon between Processing and Completed, matching the Canva tracker. Steps are narrower (`w-14 sm:w-16`) so four steps fit in the 380 px detail panel and at 375 px wide.
+  - `components/orders/my-orders.tsx`: new "Out for Delivery" filter tab. The empty-state title uses the status label instead of the raw value.
+- **Canva vs. backend mismatches (backend rules kept):**
+  - Canva shows "Order Confirmed / Processing Your Order / Out for Delivery / Delivered" with a timestamp under every step.
+  - The existing labels "Order Placed / Processing / Completed" are kept, because the status is `completed`.
+  - There is no status history in either backend, so only "Order Placed" shows a time. No times are made up.
+  - The Canva tabs "Pending Payment", "Shipped" and "Delivered" have no matching status.
+  - Orders completed before this change also show the Out for Delivery step as done, because the tracker shows progress by position.
+- **Verified:**
+  - `npm run typecheck`, `npm run lint` and `npm run build` pass on the final code.
+  - In the browser against the local stack, with an order moved through the merchant API: list badge, filter tab, detail panel, order details page, and the tracker at 1440 px and 375 px (no horizontal scroll). Existing Completed orders still render correctly.

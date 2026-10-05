@@ -9,7 +9,7 @@ import { OrderDetail } from "@/components/orders/order-detail";
 import { Pagination } from "@/components/storefront/pagination";
 import { ProductImage } from "@/components/storefront/product-image";
 import { EmptyState, ErrorState, ListSkeleton } from "@/components/storefront/states";
-import { OrderStatusBadge } from "@/components/storefront/status-badge";
+import { OrderStatusBadge, orderStatusLabel } from "@/components/storefront/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useOrders } from "@/hooks/use-orders";
@@ -22,6 +22,7 @@ const tabs: { value: OrderStatus | null; label: string }[] = [
   { value: null, label: "All Orders" },
   { value: "pending", label: "Pending" },
   { value: "processing", label: "Processing" },
+  { value: "out_for_delivery", label: "Out for Delivery" },
   { value: "completed", label: "Completed" },
   { value: "cancelled", label: "Cancelled" },
 ];
@@ -75,7 +76,7 @@ export function MyOrders() {
       ) : items.length === 0 ? (
         <EmptyState
           icon={Package}
-          title={status ? `No ${status} orders` : "No orders yet"}
+          title={status ? `No ${orderStatusLabel[status].toLowerCase()} orders` : "No orders yet"}
           description={status ? "Orders with this status will appear here." : "When you place an order, you can track it here."}
           action={<Button asChild className="rounded-full bg-brand"><Link href="/products">Start Shopping</Link></Button>}
         />
