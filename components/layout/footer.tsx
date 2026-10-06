@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 import { BrandLogo } from "@/components/layout/brand-logo";
@@ -21,8 +22,15 @@ export function Footer() {
           ))}
         </nav>
       </Container>
-      <div className="border-t border-slate-100 py-4 text-center text-[11px] text-slate-400">
-        © {new Date().getFullYear()} {siteConfig.appName}. All rights reserved.
+      <div className="border-t border-slate-100 py-4">
+        <Container className="flex flex-col items-center justify-between gap-2 text-[11px] text-slate-400 sm:flex-row">
+          <p>© {new Date().getFullYear()} {siteConfig.appName}. All rights reserved.</p>
+          {/* Powered-by: BlitzDev IT Consultancy, the agency behind SofiaCart. */}
+          <span className="inline-flex items-center gap-2">
+            <span className="font-semibold uppercase tracking-wider">Powered by</span>
+            <Image src="/brand/blitzdev-logo.png" alt="BlitzDev IT Consultancy" width={1550} height={348} className="h-4 w-auto" />
+          </span>
+        </Container>
       </div>
     </footer>
   );
