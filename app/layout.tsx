@@ -8,6 +8,7 @@ import { siteConfig } from "@/lib/constants/site";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://178.128.111.10"),
   title: { default: `${siteConfig.appName} — ${siteConfig.tagline}`, template: `%s | ${siteConfig.appName}` },
   description: siteConfig.description,
 };
