@@ -201,6 +201,8 @@ export interface PaymentMethodOption {
   /** True when the method is processed online by HitPay (redirect to hosted checkout). */
   online?: boolean;
   gateway?: string;
+  /** Shown but not selectable yet (e.g. awaiting activation on HitPay). */
+  comingSoon?: boolean;
 }
 
 export type VoucherType = "fixed" | "percentage";

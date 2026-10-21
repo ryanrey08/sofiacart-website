@@ -69,7 +69,8 @@ export function CheckoutPageClient() {
   const shippingMethod = shipping.data?.shippingMethods.some((method) => method.code === store.shippingMethod)
     ? store.shippingMethod
     : (shipping.data?.shippingMethods[0]?.code ?? null);
-  const paymentMethod = payments.data?.some((method) => method.code === store.paymentMethod) ? store.paymentMethod : null;
+  // A "coming soon" method (e.g. remembered from an earlier visit) doesn't count as chosen.
+  const paymentMethod = payments.data?.some((method) => method.code === store.paymentMethod && !method.comingSoon) ? store.paymentMethod : null;
 
   const summary = useCheckoutSummary({ cartItemIds: store.cartItemIds, shippingMethod, voucherCode: store.voucherCode });
   const cartGone = summary.error instanceof ApiClientError && Boolean(summary.error.fieldError("cart") || summary.error.fieldError("cartItemIds"));
@@ -222,28 +223,40 @@ export function CheckoutPageClient() {
                   const visual = paymentIcons[method.code] ?? paymentIcons.card;
                   const Icon = visual.icon;
                   const active = method.code === paymentMethod;
+                  const comingSoon = method.comingSoon === true;
                   return (
                     <button
                       key={method.code}
                       type="button"
                       role="radio"
                       aria-checked={active}
+                      disabled={comingSoon}
+                      aria-disabled={comingSoon}
                       onClick={() => store.setDetails({ paymentMethod: method.code as PaymentMethodCode })}
-                      className={cn(optionClass(active), "items-center p-3.5")}
+                      className={cn(
+                        optionClass(active),
+                        "items-center p-3.5",
+                        comingSoon && "cursor-not-allowed border-slate-200 bg-slate-50 opacity-60 hover:border-slate-200"
+                      )}
                     >
                       {radioDot(active)}
-                      <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", visual.className)}>
+                      <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", visual.className, comingSoon && "grayscale")}>
                         <Icon className="h-4 w-4" />
                       </div>
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <p className="text-xs font-bold text-ink">{method.name}</p>
                         {method.description ? <p className="text-[10px] text-slate-500">{method.description}</p> : null}
                       </div>
+                      {comingSoon ? (
+                        <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600">
+                          Coming soon
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}
                 <p className="text-[11px] text-slate-500">
-                  SofiaCart never asks for card numbers. QR Ph, GCash and Card are processed securely by HitPay — you&apos;ll be redirected to complete payment. Maya and bank transfers are confirmed by the store.
+                  SofiaCart never asks for card numbers. QR Ph, GCash, Maya and Card are processed securely by HitPay — you&apos;ll be redirected to complete payment. Bank transfers are confirmed by the store.
                 </p>
               </div>
             )}

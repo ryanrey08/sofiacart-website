@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckCircle2, Clock, ExternalLink, RefreshCw } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { PaymentStatusBadge } from "@/components/storefront/status-badge";
 import { InlineError } from "@/components/storefront/states";
@@ -16,23 +16,40 @@ import type { Order, Payment, PaymentMethodCode } from "@/types/domain";
 
 const cashMethods = new Set(["cod", "cash"]);
 
-/** Send the browser to HitPay's hosted checkout for an order, choosing/keeping a method. */
+/** Send the browser to HitPay's page for the order's chosen method (the backend returns HitPay's own URL). */
 function usePayWithHitPay() {
   const initiate = useInitiateHitPay();
+  // Stays set while the browser leaves for HitPay, so the button can't start a second request.
+  const [redirecting, setRedirecting] = useState(false);
 
-  const pay = (orderNumber: string, paymentMethod?: PaymentMethodCode) =>
+  // Coming back with the browser's Back button restores this page from cache; unlock the button.
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) setRedirecting(false);
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
+
+  const pay =(orderNumber: string, paymentMethod?: PaymentMethodCode | null) => {
+    if (initiate.isPending || redirecting) return;
     initiate.mutate(
-      { orderNumber, paymentMethod },
+      { orderNumber, paymentMethod: paymentMethod ?? undefined },
       {
         onSuccess: ({ redirectUrl }) => {
-          if (redirectUrl) window.location.assign(redirectUrl);
-          else toast.error("Couldn't start payment", "Please try again.");
+          if (!redirectUrl) {
+            toast.error("Couldn't start payment", "Please try again.");
+            return;
+          }
+          setRedirecting(true);
+          window.location.assign(redirectUrl);
         },
         onError: (error) => toast.error("Couldn't start payment", errorMessage(error)),
       }
     );
+  };
 
-  return { pay, pending: initiate.isPending };
+  return { pay, pending: initiate.isPending || redirecting };
 }
 
 function ReferenceForm({ payment, orderNumber }: { payment: Payment; orderNumber: string }) {
@@ -77,9 +94,11 @@ function RetryPayment({ order }: { order: Order }) {
   const methods = usePaymentMethods();
   const retry = useRetryPayment();
   const { pay, pending: hitpayPending } = usePayWithHitPay();
-  const [method, setMethod] = useState<PaymentMethodCode | "">(order.paymentMethod ?? "");
+  const [chosen, setMethod] = useState<PaymentMethodCode | "">(order.paymentMethod ?? "");
 
-  const selected = methods.data?.find((option) => option.code === method);
+  // The order's own method may be "coming soon" now; it can't be preselected or paid with.
+  const selected = methods.data?.find((option) => option.code === chosen && !option.comingSoon);
+  const method = selected ? chosen : "";
 
   function onPayAgain() {
     if (!method) return;
@@ -104,7 +123,11 @@ function RetryPayment({ order }: { order: Order }) {
           className="h-9 flex-1 rounded-xl border border-slate-200 bg-white px-2 text-xs"
         >
           <option value="" disabled>Select a method</option>
-          {methods.data?.map((option) => <option key={option.code} value={option.code}>{option.name}</option>)}
+          {methods.data?.map((option) => (
+            <option key={option.code} value={option.code} disabled={option.comingSoon}>
+              {option.name}{option.comingSoon ? " (Coming soon)" : ""}
+            </option>
+          ))}
         </select>
         <Button
           disabled={!method || retry.isPending || hitpayPending}
@@ -124,6 +147,8 @@ export function PaymentPanel({ order }: { order: Order }) {
   const payments = order.payments ?? [];
   const current = payments[0];
   const { pay, pending: hitpayPending } = usePayWithHitPay();
+  const methods = usePaymentMethods();
+  const currentComingSoon = methods.data?.some((option) => option.code === current?.method && option.comingSoon) ?? false;
   const outstanding = order.balance?.outstanding ?? 0;
   const hasPending = payments.some((payment) => payment.status === "pending" && !payment.isExpired);
   const canRetry = order.status !== "cancelled" && outstanding > 0 && !hasPending && payments.length > 0;
@@ -149,6 +174,23 @@ export function PaymentPanel({ order }: { order: Order }) {
         <p className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
           <CheckCircle2 className="h-4 w-4" /> Paid {current.paidAt ? `on ${formatDateTime(current.paidAt)}` : ""}
         </p>
+      ) : isPendingLive && current.isHitPay && currentComingSoon ? (
+        <div className="space-y-2">
+          <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
+            <Clock className="h-4 w-4" /> {current.methodName} is coming soon. Choose another payment method to pay for this order.
+          </p>
+          {order.status !== "cancelled" ? (
+            // The backend closes the GCash attempt (it never reaches HitPay), then the method list appears.
+            <Button
+              onClick={() => pay(order.orderNumber, current.method)}
+              disabled={hitpayPending}
+              variant="outline"
+              className="h-9 w-full rounded-xl text-xs font-bold"
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> {hitpayPending ? "Updating…" : "Choose another payment method"}
+            </Button>
+          ) : null}
+        </div>
       ) : isPendingLive && current.isHitPay ? (
         <div className="space-y-2">
           <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
@@ -156,7 +198,7 @@ export function PaymentPanel({ order }: { order: Order }) {
           </p>
           {order.status !== "cancelled" ? (
             <Button
-              onClick={() => pay(order.orderNumber)}
+              onClick={() => pay(order.orderNumber, current.method)}
               disabled={hitpayPending}
               className="h-9 w-full rounded-xl bg-brand text-xs font-bold"
             >

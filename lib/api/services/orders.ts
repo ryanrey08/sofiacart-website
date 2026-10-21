@@ -46,11 +46,16 @@ export const orderService = {
     );
     return data.data.payment;
   },
-  /** Start (or resume) a HitPay hosted checkout for the order and return its redirect URL. */
+  /**
+   * Start (or resume) HitPay for the order's chosen method and return HitPay's checkout URL, which
+   * opens with only that method (QR Ph, GCash or Card).
+   */
   async initiateHitPay(orderNumber: string, paymentMethod?: PaymentMethodCode) {
     const { data } = await apiClient.post<ApiEnvelope<{ redirectUrl: string; payment: Payment }>>(
       apiEndpoints.account.hitpayInitiate(orderNumber),
-      paymentMethod ? { paymentMethod } : {}
+      paymentMethod ? { paymentMethod } : {},
+      // The backend waits up to HITPAY_HTTP_TIMEOUT (30s) for HitPay; outlast it rather than give up first.
+      { timeout: 35000 }
     );
     return data.data;
   },

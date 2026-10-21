@@ -3,7 +3,7 @@
 import { Check, CreditCard, FileText, Lock, LockKeyhole, MapPin, Pencil, ShoppingBag, ShoppingCart, Truck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createElement, useState } from "react";
+import { createElement, useRef, useState } from "react";
 
 import { AddressSummary } from "@/components/account/address-summary";
 import { VerificationRequired } from "@/components/auth/verification-required";
@@ -21,6 +21,7 @@ import { useAddresses } from "@/hooks/use-account";
 import { useCheckoutSummary, usePaymentMethods, usePlaceOrder, useShippingMethods } from "@/hooks/use-checkout";
 import { useInitiateHitPay } from "@/hooks/use-orders";
 import { useSession } from "@/hooks/use-session";
+import { errorMessage } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
 import { useCheckoutStore } from "@/stores/checkout-store";
@@ -56,10 +57,12 @@ export function PlaceOrderClient() {
   const initiateHitPay = useInitiateHitPay();
   const [agreed, setAgreed] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
+  const submitting = useRef(false);
 
   const address = addresses.data?.find((entry) => entry.id === store.addressId);
   const shippingMethod = shipping.data?.shippingMethods.find((method) => method.code === store.shippingMethod);
-  const paymentMethod = payments.data?.find((method) => method.code === store.paymentMethod);
+  // A method that became "coming soon" since it was chosen sends the customer back to choose again.
+  const paymentMethod = payments.data?.find((method) => method.code === store.paymentMethod && !method.comingSoon);
   const detailsReady = Boolean(store.addressId && store.shippingMethod && store.paymentMethod);
   const detailsMissing = addresses.isSuccess && shipping.isSuccess && payments.isSuccess && (!address || !shippingMethod || !paymentMethod);
 
@@ -83,8 +86,15 @@ export function PlaceOrderClient() {
   }
 
   function submit() {
-    if (!agreed || !store.addressId || !store.shippingMethod || !store.paymentMethod) return;
+    if (submitting.current || !agreed || !store.addressId || !store.shippingMethod || !store.paymentMethod) return;
+    // Lock until the order fails or the browser leaves for HitPay, so a fast double click can't
+    // place a second order or start a second payment.
+    submitting.current = true;
     const idempotencyKey = store.ensureIdempotencyKey();
+    // The method this order is placed with is the one HitPay opens, read once here so a later store
+    // change can't swap it.
+    const chosenMethod = store.paymentMethod;
+    const online = paymentMethod?.online === true;
 
     placeOrder.mutate(
       {
@@ -92,7 +102,7 @@ export function PlaceOrderClient() {
         payload: {
           addressId: store.addressId,
           shippingMethod: store.shippingMethod,
-          paymentMethod: store.paymentMethod,
+          paymentMethod: chosenMethod,
           voucherCode: store.voucherCode,
           cartItemIds: store.cartItemIds,
           notes: store.notes.trim() || null,
@@ -102,29 +112,38 @@ export function PlaceOrderClient() {
         onSuccess: (checkout) => {
           store.completeCheckout(checkout);
           toast.success("Order placed!", `Reference ${checkout.reference}`);
+          const completePage = `/order/complete?ref=${encodeURIComponent(checkout.reference)}`;
 
-          // A single online (HitPay) order goes straight to the hosted checkout. Multi-store orders
-          // and store-verified methods land on the confirmation page, which offers "Pay now" per order.
+          // A single online (HitPay) order goes straight to the chosen method's payment page. Multi-store
+          // orders and store-verified methods land on the confirmation page, which offers "Pay now" per order.
           const single = checkout.orders.length === 1 ? checkout.orders[0] : null;
-          if (single && paymentMethod?.online) {
+          if (single && online) {
             setRedirecting(true);
             initiateHitPay.mutate(
-              { orderNumber: single.orderNumber },
+              { orderNumber: single.orderNumber, paymentMethod: chosenMethod },
               {
                 onSuccess: ({ redirectUrl }) => {
-                  if (redirectUrl) window.location.assign(redirectUrl);
-                  else router.replace(`/order/complete?ref=${encodeURIComponent(checkout.reference)}`);
-                },
-                onError: () => {
+                  if (redirectUrl) {
+                    window.location.assign(redirectUrl);
+                    return;
+                  }
                   toast.error("Couldn't open secure checkout", "You can pay from the order page.");
-                  router.replace(`/order/complete?ref=${encodeURIComponent(checkout.reference)}`);
+                  router.replace(completePage);
+                },
+                onError: (error) => {
+                  // The order exists; say why payment didn't start and let the customer pay from the order page.
+                  toast.error("Couldn't open secure checkout", `${errorMessage(error)} You can pay from the order page.`);
+                  router.replace(completePage);
                 },
               }
             );
             return;
           }
 
-          router.replace(`/order/complete?ref=${encodeURIComponent(checkout.reference)}`);
+          router.replace(completePage);
+        },
+        onError: () => {
+          submitting.current = false;
         },
       }
     );

@@ -79,13 +79,18 @@ export function useRetryPayment() {
 }
 
 /**
- * Start a HitPay checkout and hand back the redirect URL. The caller redirects the browser to
- * HitPay's hosted checkout; the payment is only ever confirmed server-side via the webhook.
+ * Start HitPay for the chosen method and hand back HitPay's URL. The caller redirects the browser
+ * there; the payment is only ever confirmed server-side via the webhook.
  */
 export function useInitiateHitPay() {
+  const invalidate = useInvalidateOrder();
+
   return useMutation({
     mutationFn: ({ orderNumber, paymentMethod }: { orderNumber: string; paymentMethod?: PaymentMethodCode }) =>
       orderService.initiateHitPay(orderNumber, paymentMethod),
+    // A refused method (unavailable / coming soon) closes the pending payment server-side; refetch so
+    // the order page offers another method.
+    onError: (_error, { orderNumber }) => invalidate(orderNumber),
   });
 }
 
