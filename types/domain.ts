@@ -186,6 +186,7 @@ export interface ShippingMethodsResponse {
 export type PaymentMethodCode =
   | "card"
   | "gcash"
+  | "qrph"
   | "maya"
   | "bank_transfer"
   | "cod"
@@ -197,6 +198,9 @@ export interface PaymentMethodOption {
   code: PaymentMethodCode;
   name: string;
   description: string | null;
+  /** True when the method is processed online by HitPay (redirect to hosted checkout). */
+  online?: boolean;
+  gateway?: string;
 }
 
 export type VoucherType = "fixed" | "percentage";
@@ -314,6 +318,11 @@ export interface Payment {
   method: PaymentMethodCode | null;
   methodName: string | null;
   status: PaymentStatus;
+  gateway: string | null;
+  /** True when this payment is processed online by HitPay (QR Ph, GCash, Credit Card). */
+  isHitPay: boolean;
+  /** HitPay hosted-checkout URL to resume an unpaid online payment (null once settled/expired). */
+  checkoutUrl: string | null;
   isExpired: boolean;
   amount: number;
   currency: string;

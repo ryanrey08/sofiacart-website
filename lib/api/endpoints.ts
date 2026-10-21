@@ -37,6 +37,8 @@ export const apiEndpoints = {
     orderStatus: (orderNumber: string) => `/account/orders/${segment(orderNumber)}/status`,
     cancelOrder: (orderNumber: string) => `/account/orders/${segment(orderNumber)}/cancel`,
     retryPayment: (orderNumber: string) => `/account/orders/${segment(orderNumber)}/payments`,
+    hitpayInitiate: (orderNumber: string) => `/account/orders/${segment(orderNumber)}/payments/hitpay`,
+    hitpayStatus: (orderNumber: string) => `/account/orders/${segment(orderNumber)}/payments/hitpay/status`,
     returnable: (orderNumber: string) => `/account/orders/${segment(orderNumber)}/returnable`,
     requestReturn: (orderNumber: string) => `/account/orders/${segment(orderNumber)}/returns`,
     returns: "/account/returns",

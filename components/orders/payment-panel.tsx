@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Clock, RefreshCw } from "lucide-react";
+import { CheckCircle2, Clock, ExternalLink, RefreshCw } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { PaymentStatusBadge } from "@/components/storefront/status-badge";
@@ -8,12 +8,32 @@ import { InlineError } from "@/components/storefront/states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePaymentMethods } from "@/hooks/use-checkout";
-import { useRetryPayment, useSubmitPaymentReference } from "@/hooks/use-orders";
+import { useInitiateHitPay, useRetryPayment, useSubmitPaymentReference } from "@/hooks/use-orders";
+import { errorMessage } from "@/lib/api/client";
 import { formatCurrency, formatDateTime } from "@/lib/utils/format";
 import { toast } from "@/stores/toast-store";
 import type { Order, Payment, PaymentMethodCode } from "@/types/domain";
 
 const cashMethods = new Set(["cod", "cash"]);
+
+/** Send the browser to HitPay's hosted checkout for an order, choosing/keeping a method. */
+function usePayWithHitPay() {
+  const initiate = useInitiateHitPay();
+
+  const pay = (orderNumber: string, paymentMethod?: PaymentMethodCode) =>
+    initiate.mutate(
+      { orderNumber, paymentMethod },
+      {
+        onSuccess: ({ redirectUrl }) => {
+          if (redirectUrl) window.location.assign(redirectUrl);
+          else toast.error("Couldn't start payment", "Please try again.");
+        },
+        onError: (error) => toast.error("Couldn't start payment", errorMessage(error)),
+      }
+    );
+
+  return { pay, pending: initiate.isPending };
+}
 
 function ReferenceForm({ payment, orderNumber }: { payment: Payment; orderNumber: string }) {
   const [value, setValue] = useState(payment.gatewayReference ?? "");
@@ -56,7 +76,20 @@ function ReferenceForm({ payment, orderNumber }: { payment: Payment; orderNumber
 function RetryPayment({ order }: { order: Order }) {
   const methods = usePaymentMethods();
   const retry = useRetryPayment();
+  const { pay, pending: hitpayPending } = usePayWithHitPay();
   const [method, setMethod] = useState<PaymentMethodCode | "">(order.paymentMethod ?? "");
+
+  const selected = methods.data?.find((option) => option.code === method);
+
+  function onPayAgain() {
+    if (!method) return;
+    // Online methods go back through HitPay; store-verified methods create a new pending payment.
+    if (selected?.online) {
+      pay(order.orderNumber, method);
+    } else {
+      retry.mutate({ orderNumber: order.orderNumber, paymentMethod: method }, { onSuccess: () => toast.success("New payment created") });
+    }
+  }
 
   return (
     <div className="space-y-2 rounded-xl border border-amber-100 bg-amber-50/60 p-3">
@@ -74,10 +107,8 @@ function RetryPayment({ order }: { order: Order }) {
           {methods.data?.map((option) => <option key={option.code} value={option.code}>{option.name}</option>)}
         </select>
         <Button
-          disabled={!method || retry.isPending}
-          onClick={() =>
-            method && retry.mutate({ orderNumber: order.orderNumber, paymentMethod: method }, { onSuccess: () => toast.success("New payment created") })
-          }
+          disabled={!method || retry.isPending || hitpayPending}
+          onClick={onPayAgain}
           className="h-9 rounded-xl bg-brand text-xs font-bold"
         >
           <RefreshCw className="h-3.5 w-3.5" /> Pay again
@@ -88,15 +119,18 @@ function RetryPayment({ order }: { order: Order }) {
   );
 }
 
-/** Payment status, reference submission and retry for one order (needs the detailed order). */
+/** Payment status, HitPay checkout, reference submission and retry for one order (needs the detailed order). */
 export function PaymentPanel({ order }: { order: Order }) {
   const payments = order.payments ?? [];
   const current = payments[0];
+  const { pay, pending: hitpayPending } = usePayWithHitPay();
   const outstanding = order.balance?.outstanding ?? 0;
   const hasPending = payments.some((payment) => payment.status === "pending" && !payment.isExpired);
   const canRetry = order.status !== "cancelled" && outstanding > 0 && !hasPending && payments.length > 0;
 
   if (!current) return null;
+
+  const isPendingLive = current.status === "pending" && !current.isExpired;
 
   return (
     <div className="space-y-3">
@@ -115,7 +149,22 @@ export function PaymentPanel({ order }: { order: Order }) {
         <p className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
           <CheckCircle2 className="h-4 w-4" /> Paid {current.paidAt ? `on ${formatDateTime(current.paidAt)}` : ""}
         </p>
-      ) : current.status === "pending" && !current.isExpired ? (
+      ) : isPendingLive && current.isHitPay ? (
+        <div className="space-y-2">
+          <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
+            <Clock className="h-4 w-4" /> Complete your secure {current.methodName} payment with HitPay.
+          </p>
+          {order.status !== "cancelled" ? (
+            <Button
+              onClick={() => pay(order.orderNumber)}
+              disabled={hitpayPending}
+              className="h-9 w-full rounded-xl bg-brand text-xs font-bold"
+            >
+              <ExternalLink className="h-3.5 w-3.5" /> {hitpayPending ? "Redirecting…" : `Pay now with ${current.methodName}`}
+            </Button>
+          ) : null}
+        </div>
+      ) : isPendingLive ? (
         cashMethods.has(current.method ?? "") ? (
           <p className="flex items-center gap-1.5 text-[11px] text-slate-500">
             <Clock className="h-4 w-4" /> Pay in cash when your order arrives.

@@ -238,7 +238,7 @@ export function CheckoutPageClient() {
                   );
                 })}
                 <p className="text-[11px] text-slate-500">
-                  SofiaCart never asks for card numbers. The store confirms your payment; e-wallet and bank payments can add a reference number after ordering.
+                  SofiaCart never asks for card numbers. QR Ph, GCash and Card are processed securely by HitPay — you&apos;ll be redirected to complete payment. Maya and bank transfers are confirmed by the store.
                 </p>
               </div>
             )}

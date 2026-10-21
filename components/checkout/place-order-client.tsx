@@ -18,6 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { useAddresses } from "@/hooks/use-account";
 import { useCheckoutSummary, usePaymentMethods, usePlaceOrder, useShippingMethods } from "@/hooks/use-checkout";
+import { useInitiateHitPay } from "@/hooks/use-orders";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
 import { useCheckoutStore } from "@/stores/checkout-store";
@@ -49,7 +50,9 @@ export function PlaceOrderClient() {
   const shipping = useShippingMethods();
   const payments = usePaymentMethods();
   const placeOrder = usePlaceOrder();
+  const initiateHitPay = useInitiateHitPay();
   const [agreed, setAgreed] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
 
   const address = addresses.data?.find((entry) => entry.id === store.addressId);
   const shippingMethod = shipping.data?.shippingMethods.find((method) => method.code === store.shippingMethod);
@@ -92,6 +95,28 @@ export function PlaceOrderClient() {
         onSuccess: (checkout) => {
           store.completeCheckout(checkout);
           toast.success("Order placed!", `Reference ${checkout.reference}`);
+
+          // A single online (HitPay) order goes straight to the hosted checkout. Multi-store orders
+          // and store-verified methods land on the confirmation page, which offers "Pay now" per order.
+          const single = checkout.orders.length === 1 ? checkout.orders[0] : null;
+          if (single && paymentMethod?.online) {
+            setRedirecting(true);
+            initiateHitPay.mutate(
+              { orderNumber: single.orderNumber },
+              {
+                onSuccess: ({ redirectUrl }) => {
+                  if (redirectUrl) window.location.assign(redirectUrl);
+                  else router.replace(`/order/complete?ref=${encodeURIComponent(checkout.reference)}`);
+                },
+                onError: () => {
+                  toast.error("Couldn't open secure checkout", "You can pay from the order page.");
+                  router.replace(`/order/complete?ref=${encodeURIComponent(checkout.reference)}`);
+                },
+              }
+            );
+            return;
+          }
+
           router.replace(`/order/complete?ref=${encodeURIComponent(checkout.reference)}`);
         },
       }
@@ -226,10 +251,11 @@ export function PlaceOrderClient() {
             <InlineError error={placeOrder.error} />
             <Button
               onClick={submit}
-              disabled={!agreed || placeOrder.isPending || summary.isPending || summary.isError}
+              disabled={!agreed || placeOrder.isPending || redirecting || summary.isPending || summary.isError}
               className="h-12 w-full rounded-2xl bg-cta text-sm font-bold text-white shadow-lg shadow-pink-500/20 hover:opacity-95"
             >
-              <Lock className="h-4 w-4" /> {placeOrder.isPending ? "Placing your order…" : "Place Order →"}
+              <Lock className="h-4 w-4" />{" "}
+              {redirecting ? "Opening secure checkout…" : placeOrder.isPending ? "Placing your order…" : paymentMethod?.online ? "Place Order & Pay →" : "Place Order →"}
             </Button>
             <p className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400">
               <LockKeyhole className="h-3.5 w-3.5" /> Totals are confirmed by SofiaCart when you place your order.

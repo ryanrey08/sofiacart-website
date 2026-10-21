@@ -1,6 +1,7 @@
-import { Banknote, Building2, CreditCard, Smartphone, Truck, Zap, type LucideIcon } from "lucide-react";
+import { Banknote, Building2, CreditCard, QrCode, Smartphone, Truck, Zap, type LucideIcon } from "lucide-react";
 
 export const paymentIcons: Record<string, { icon: LucideIcon; className: string }> = {
+  qrph: { icon: QrCode, className: "bg-indigo-600 text-white" },
   card: { icon: CreditCard, className: "bg-brand/10 text-brand" },
   gcash: { icon: Smartphone, className: "bg-blue-600 text-white" },
   maya: { icon: Smartphone, className: "bg-emerald-600 text-white" },

@@ -46,6 +46,20 @@ export const orderService = {
     );
     return data.data.payment;
   },
+  /** Start (or resume) a HitPay hosted checkout for the order and return its redirect URL. */
+  async initiateHitPay(orderNumber: string, paymentMethod?: PaymentMethodCode) {
+    const { data } = await apiClient.post<ApiEnvelope<{ redirectUrl: string; payment: Payment }>>(
+      apiEndpoints.account.hitpayInitiate(orderNumber),
+      paymentMethod ? { paymentMethod } : {}
+    );
+    return data.data;
+  },
+  /** Pull the verified HitPay status for an order from the backend (used after returning from HitPay). */
+  async syncHitPay(orderNumber: string) {
+    return getData<{ payment: Payment | null; orderNumber: string; paymentStatus: string }>(
+      apiEndpoints.account.hitpayStatus(orderNumber)
+    );
+  },
   returnable(orderNumber: string) {
     return getData<Returnability>(apiEndpoints.account.returnable(orderNumber));
   },

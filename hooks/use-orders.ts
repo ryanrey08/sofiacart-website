@@ -78,6 +78,27 @@ export function useRetryPayment() {
   });
 }
 
+/**
+ * Start a HitPay checkout and hand back the redirect URL. The caller redirects the browser to
+ * HitPay's hosted checkout; the payment is only ever confirmed server-side via the webhook.
+ */
+export function useInitiateHitPay() {
+  return useMutation({
+    mutationFn: ({ orderNumber, paymentMethod }: { orderNumber: string; paymentMethod?: PaymentMethodCode }) =>
+      orderService.initiateHitPay(orderNumber, paymentMethod),
+  });
+}
+
+/** Ask the backend for the verified HitPay status after the browser returns from checkout. */
+export function useSyncHitPay() {
+  const invalidate = useInvalidateOrder();
+
+  return useMutation({
+    mutationFn: ({ orderNumber }: { orderNumber: string }) => orderService.syncHitPay(orderNumber),
+    onSuccess: (_result, { orderNumber }) => invalidate(orderNumber),
+  });
+}
+
 export function useSubmitPaymentReference() {
   const invalidate = useInvalidateOrder();
 
