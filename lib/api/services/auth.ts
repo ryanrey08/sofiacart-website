@@ -6,7 +6,19 @@ import type { AddressInput, AuthTokens, User } from "@/types/domain";
 export interface AuthResponse {
   user: User;
   tokens: AuthTokens;
+  /** Registration only: false when the verification email could not be sent. */
+  verificationEmailSent?: boolean;
 }
+
+/** Parameters of an emailed verification link (FRONTEND_URL/verify-email?id=&hash=&expires=&signature=). */
+export interface VerificationLink {
+  id: string;
+  hash: string;
+  expires: string;
+  signature: string;
+}
+
+export type VerifyEmailStatus = "verified" | "already_verified";
 
 export interface LoginPayload {
   email: string;
@@ -65,8 +77,19 @@ export const authService = {
     const { data } = await apiClient.post<ApiEnvelope<object>>(apiEndpoints.auth.resetPassword, payload);
     return data.message;
   },
+  /** Resend to the signed-in customer's own email address. */
   async resendVerification() {
     const { data } = await apiClient.post<ApiEnvelope<object>>(apiEndpoints.auth.resendVerification);
     return data.message;
+  },
+  /** Signed-out resend, by email address or from an expired link. The reply never reveals whether an account exists. */
+  async resendVerificationPublic(payload: { email: string } | VerificationLink) {
+    const { data } = await apiClient.post<ApiEnvelope<object>>(apiEndpoints.auth.resendVerificationPublic, payload);
+    return data.message;
+  },
+  /** The backend checks the link's signature, expiry and account before marking the email verified. */
+  async verifyEmail(link: VerificationLink) {
+    const { data } = await apiClient.post<ApiEnvelope<{ status: VerifyEmailStatus }>>(apiEndpoints.auth.verifyEmail, link);
+    return { status: data.data.status, message: data.message };
   },
 };

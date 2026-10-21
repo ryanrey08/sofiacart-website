@@ -13,6 +13,8 @@ export const apiEndpoints = {
     forgotPassword: "/auth/forgot-password",
     resetPassword: "/auth/reset-password",
     resendVerification: "/auth/email/verification-notification",
+    resendVerificationPublic: "/auth/email/resend",
+    verifyEmail: "/auth/email/verify",
   },
   catalog: {
     products: "/products",

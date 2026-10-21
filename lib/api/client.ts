@@ -8,7 +8,11 @@ export class ApiClientError extends Error {
   constructor(
     message: string,
     public status?: number,
-    public errors?: Record<string, string[]>
+    public errors?: Record<string, string[]>,
+    /** Backend error code (`ApiErrorResponse.code`). */
+    public code?: string,
+    /** Seconds until a rate-limited (429) request may be retried, from `Retry-After`. */
+    public retryAfter?: number
   ) {
     super(message);
     this.name = "ApiClientError";
@@ -68,13 +72,31 @@ apiClient.interceptors.response.use(
       message = "We couldn't reach SofiaCart. Check your connection and try again.";
     } else if (status === 429) {
       message = "Too many attempts. Please wait a moment and try again.";
+    } else if (status === 503 && error.response?.data?.message) {
+      // Deliberate "temporarily unavailable" answers (e.g. the verification email couldn't be sent) explain themselves.
+      message = error.response.data.message;
     } else if (status && status >= 500) {
       message = "Something went wrong on our side. Please try again.";
     }
 
-    return Promise.reject(new ApiClientError(message, status, error.response?.data?.errors));
+    const retryAfter = Number(error.response?.headers?.["retry-after"]);
+
+    return Promise.reject(
+      new ApiClientError(
+        message,
+        status,
+        error.response?.data?.errors,
+        error.response?.data?.code,
+        Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined
+      )
+    );
   }
 );
+
+/** The backend refused a feature that needs a verified email address (403 `email_unverified`). */
+export function isEmailUnverifiedError(error: unknown) {
+  return error instanceof ApiClientError && error.code === "email_unverified";
+}
 
 /** Unwraps the `{ data }` envelope used by customer endpoints. */
 export async function getData<T>(url: string, params?: object): Promise<T> {

@@ -1,10 +1,11 @@
 import type { LucideIcon } from "lucide-react";
 import { AlertTriangle, Inbox } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { errorMessage } from "@/lib/api/client";
+import { errorMessage, isEmailUnverifiedError } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 
 export function EmptyState({
@@ -66,6 +67,12 @@ export function InlineError({ error, className }: { error: unknown; className?: 
   return (
     <p role="alert" className={cn("rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-600", className)}>
       {errorMessage(error)}
+      {isEmailUnverifiedError(error) ? (
+        <>
+          {" "}
+          <Link href="/verify-email/pending" className="font-bold underline underline-offset-2">Verify your email</Link>
+        </>
+      ) : null}
     </p>
   );
 }

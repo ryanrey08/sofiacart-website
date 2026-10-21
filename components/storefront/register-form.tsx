@@ -148,9 +148,10 @@ export function RegisterForm() {
         },
       },
       {
-        onSuccess: ({ user }) => {
-          toast.success(`Welcome to SofiaCart, ${user.name.split(" ")[0]}!`, "We sent a verification link to your email.");
-          router.replace(redirectTo);
+        onSuccess: ({ user, verificationEmailSent }) => {
+          const sent = verificationEmailSent !== false;
+          toast.success(`Welcome to SofiaCart, ${user.name.split(" ")[0]}!`, sent ? `We sent a verification link to ${user.email}.` : undefined);
+          router.replace(`/verify-email/pending?sent=${sent ? 1 : 0}&redirect=${encodeURIComponent(redirectTo)}`);
         },
         onError: (error) => {
           if (error instanceof ApiClientError && error.errors) {

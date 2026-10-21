@@ -8,6 +8,8 @@
 
 export interface ApiErrorResponse {
   message: string;
+  /** Machine-readable reason, e.g. `email_unverified`, `verification_link_expired`. */
+  code?: string;
   errors?: Record<string, string[]>;
 }
 

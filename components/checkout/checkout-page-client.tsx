@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import { AddressForm } from "@/components/account/address-form";
 import { AddressSummary } from "@/components/account/address-summary";
+import { VerificationRequired } from "@/components/auth/verification-required";
 import { CheckoutSummaryCard } from "@/components/checkout/checkout-summary-card";
 import { paymentIcons, shippingIcon } from "@/components/checkout/method-icons";
 import { CheckoutStepper } from "@/components/storefront/checkout-stepper";
@@ -81,6 +82,10 @@ export function CheckoutPageClient() {
     }
     store.setDetails({ addressId, shippingMethod, paymentMethod });
     router.push("/place-order");
+  }
+
+  if (user?.emailVerified === false) {
+    return <VerificationRequired email={user.email} />;
   }
 
   if (cartGone) {

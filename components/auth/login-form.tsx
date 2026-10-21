@@ -57,6 +57,11 @@ export function LoginForm() {
   function onSubmit(values: LoginValues) {
     login.mutate(values, {
       onSuccess: ({ user }) => {
+        if (user.emailVerified === false) {
+          toast.info(`Welcome back, ${user.name.split(" ")[0]}!`, "Please verify your email address to place orders.");
+          router.replace(`/verify-email/pending?redirect=${encodeURIComponent(redirectTo)}`);
+          return;
+        }
         toast.success(`Welcome back, ${user.name.split(" ")[0]}!`);
         router.replace(redirectTo);
       },

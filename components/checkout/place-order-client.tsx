@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createElement, useState } from "react";
 
 import { AddressSummary } from "@/components/account/address-summary";
+import { VerificationRequired } from "@/components/auth/verification-required";
 import { CheckoutSummaryCard } from "@/components/checkout/checkout-summary-card";
 import { paymentIcons, shippingIcon } from "@/components/checkout/method-icons";
 import { CheckoutStepper } from "@/components/storefront/checkout-stepper";
@@ -19,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAddresses } from "@/hooks/use-account";
 import { useCheckoutSummary, usePaymentMethods, usePlaceOrder, useShippingMethods } from "@/hooks/use-checkout";
 import { useInitiateHitPay } from "@/hooks/use-orders";
+import { useSession } from "@/hooks/use-session";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/format";
 import { useCheckoutStore } from "@/stores/checkout-store";
@@ -45,6 +47,7 @@ function InfoCard({ icon: Icon, title, children }: { icon: typeof MapPin; title:
 
 export function PlaceOrderClient() {
   const router = useRouter();
+  const { user } = useSession();
   const store = useCheckoutStore();
   const addresses = useAddresses();
   const shipping = useShippingMethods();
@@ -64,6 +67,10 @@ export function PlaceOrderClient() {
     { cartItemIds: store.cartItemIds, shippingMethod: store.shippingMethod, voucherCode: store.voucherCode },
     detailsReady
   );
+
+  if (user?.emailVerified === false) {
+    return <VerificationRequired email={user.email} />;
+  }
 
   if (!detailsReady || detailsMissing) {
     return (

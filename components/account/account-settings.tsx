@@ -1,6 +1,5 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
 import { BadgeCheck, Laptop, MailWarning, Settings } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
@@ -22,9 +21,9 @@ import {
   useUpdateSettings,
 } from "@/hooks/use-account";
 import { useLogout } from "@/hooks/use-auth";
+import { RESEND_COOLDOWN_SECONDS, useCooldown, useResendVerification } from "@/hooks/use-email-verification";
 import { useSession } from "@/hooks/use-session";
 import { ApiClientError, errorMessage } from "@/lib/api/client";
-import { authService } from "@/lib/api/services/auth";
 import { formatDateTime } from "@/lib/utils/format";
 import { toast } from "@/stores/toast-store";
 import type { User } from "@/types/domain";
@@ -52,7 +51,8 @@ function ProfileForm({ user }: { user: User }) {
   const [email, setEmail] = useState(user.email);
   const [currentPassword, setCurrentPassword] = useState("");
   const update = useUpdateProfile();
-  const resend = useMutation({ mutationFn: authService.resendVerification });
+  const resend = useResendVerification();
+  const cooldown = useCooldown();
   const emailChanged = email.trim().toLowerCase() !== user.email;
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -85,15 +85,21 @@ function ProfileForm({ user }: { user: User }) {
             variant="link"
             size="sm"
             className="h-auto p-0 text-[11px] font-bold text-amber-900"
-            disabled={resend.isPending}
+            disabled={resend.isPending || cooldown.remaining > 0}
             onClick={() =>
-              resend.mutate(undefined, {
-                onSuccess: (message) => toast.success(message ?? "Verification email sent"),
-                onError: (error) => toast.error("Couldn't send the email", errorMessage(error)),
+              resend.mutate({ kind: "account" }, {
+                onSuccess: (message) => {
+                  toast.success(message ?? "Verification email sent");
+                  cooldown.start(RESEND_COOLDOWN_SECONDS);
+                },
+                onError: (error) => {
+                  if (error instanceof ApiClientError && error.status === 429) cooldown.start(error.retryAfter ?? RESEND_COOLDOWN_SECONDS);
+                  toast.error("Couldn't send the email", errorMessage(error));
+                },
               })
             }
           >
-            {resend.isPending ? "Sending…" : "Resend verification email"}
+            {resend.isPending ? "Sending…" : cooldown.remaining > 0 ? `Resend available in ${cooldown.remaining}s` : "Resend verification email"}
           </Button>
         </div>
       )}
