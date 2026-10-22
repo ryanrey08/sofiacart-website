@@ -66,6 +66,17 @@ export interface StoreSummary {
   logoUrl: string | null;
 }
 
+/** A store's public storefront profile (GET /stores/{slug}); customer-facing details only. */
+export interface StoreProfile extends StoreSummary {
+  category: string | null;
+  description: string | null;
+  bannerUrl: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  address: string | null;
+  socialLinks: Record<string, string>;
+}
+
 export type StockStatus = "in_stock" | "low_stock" | "out_of_stock";
 
 export interface ProductVariant {

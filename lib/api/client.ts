@@ -1,6 +1,7 @@
 import axios, { AxiosError, AxiosHeaders } from "axios";
 
 import { env } from "@/lib/config/env";
+import { currentBrowserStoreSlug, STORE_HEADER } from "@/lib/store/host";
 import { useAuthStore } from "@/stores/auth-store";
 import type { ApiEnvelope, ApiErrorResponse } from "@/types/api";
 
@@ -43,6 +44,12 @@ apiClient.interceptors.request.use((config) => {
 
   if (accessToken) {
     nextHeaders.set("Authorization", "Bearer " + accessToken);
+  }
+
+  // On a store subdomain every request (catalog, cart, checkout, orders) is scoped to that store.
+  const storeSlug = currentBrowserStoreSlug();
+  if (storeSlug) {
+    nextHeaders.set(STORE_HEADER, storeSlug);
   }
 
   config.headers = nextHeaders;

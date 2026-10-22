@@ -5,14 +5,44 @@ import { BrandLogo } from "@/components/layout/brand-logo";
 import { Container } from "@/components/layout/container";
 import { footerNavigation } from "@/lib/constants/navigation";
 import { siteConfig } from "@/lib/constants/site";
+import { getCurrentStore } from "@/lib/store/current-store";
 
-export function Footer() {
+export async function Footer() {
+  const current = await getCurrentStore();
+  const store = current.status === "found" ? current.store : null;
+  const socialLinks = store ? Object.entries(store.socialLinks) : [];
+
   return (
     <footer className="border-t border-slate-100 bg-white">
       <Container className="grid gap-6 py-10 md:grid-cols-[1.5fr_1fr] md:items-center">
         <div className="space-y-3">
           <BrandLogo />
-          <p className="max-w-xl text-xs text-slate-500">{siteConfig.description}</p>
+          <p className="max-w-xl text-xs text-slate-500">{store ? store.description || `Shop ${store.name} on ${siteConfig.appName}.` : siteConfig.description}</p>
+          {store && (store.contactEmail || store.contactPhone) ? (
+            <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+              {store.contactEmail ? (
+                <a href={`mailto:${store.contactEmail}`} className="hover:text-brand">
+                  {store.contactEmail}
+                </a>
+              ) : null}
+              {store.contactPhone ? (
+                <a href={`tel:${store.contactPhone}`} className="hover:text-brand">
+                  {store.contactPhone}
+                </a>
+              ) : null}
+            </p>
+          ) : null}
+          {socialLinks.length > 0 ? (
+            <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold capitalize text-slate-600">
+              {socialLinks.map(([network, url]) => (
+                <li key={network}>
+                  <a href={url} target="_blank" rel="noopener noreferrer" className="hover:text-brand">
+                    {network}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
         <nav aria-label="Footer" className="flex flex-wrap gap-x-5 gap-y-2 md:justify-end">
           {footerNavigation.map((item) => (
@@ -24,7 +54,9 @@ export function Footer() {
       </Container>
       <div className="border-t border-slate-100 py-4">
         <Container className="flex flex-col items-center justify-between gap-2 text-[11px] text-slate-400 sm:flex-row">
-          <p>© {new Date().getFullYear()} {siteConfig.appName}. All rights reserved.</p>
+          <p>
+            © {new Date().getFullYear()} {store ? `${store.name} · Powered by ${siteConfig.appName}` : siteConfig.appName}. All rights reserved.
+          </p>
           {/* Powered-by: BlitzDev IT Consultancy, the agency behind SofiaCart. */}
           <span className="inline-flex items-center gap-2">
             <span className="font-semibold uppercase tracking-wider">Powered by</span>
