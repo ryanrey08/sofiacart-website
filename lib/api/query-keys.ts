@@ -14,6 +14,10 @@ export const queryKeys = {
     paymentMethods: ["checkout", "payment-methods"] as const,
     vouchers: ["vouchers"] as const,
   },
+  /** Published Terms / Privacy Policy metadata (always fetched from the backend). */
+  legal: {
+    documents: ["legal", "documents"] as const,
+  },
   /** Everything below belongs to the signed-in customer and is dropped on sign-out. */
   private: ["me"] as const,
   me: ["me", "user"] as const,

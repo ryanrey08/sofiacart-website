@@ -1,13 +1,15 @@
 import { apiClient, getData } from "@/lib/api/client";
 import { apiEndpoints } from "@/lib/api/endpoints";
 import type { ApiEnvelope } from "@/types/api";
-import type { AddressInput, AuthTokens, User } from "@/types/domain";
+import type { AddressInput, AuthTokens, LegalConsent, User } from "@/types/domain";
 
 export interface AuthResponse {
   user: User;
   tokens: AuthTokens;
   /** Registration only: false when the verification email could not be sent. */
   verificationEmailSent?: boolean;
+  /** Registration only: the Terms / Privacy Policy versions the server recorded. */
+  legalConsents?: LegalConsent[];
 }
 
 /** Parameters of an emailed verification link (FRONTEND_URL/verify-email?id=&hash=&expires=&signature=). */
@@ -34,6 +36,12 @@ export interface RegisterPayload {
   password: string;
   passwordConfirmation: string;
   shippingAddress?: AddressInput | null;
+  /** Explicit acceptance of the published Terms version shown on the form. */
+  acceptTerms: boolean;
+  termsDocumentId: number;
+  /** Acknowledgment (not blanket consent) of the published Privacy Policy version shown. */
+  acknowledgePrivacy: boolean;
+  privacyDocumentId: number;
 }
 
 export interface ResetPasswordPayload {

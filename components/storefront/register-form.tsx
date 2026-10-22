@@ -39,6 +39,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { InlineError } from "@/components/storefront/states";
 import { useRegister } from "@/hooks/use-auth";
+import { useLegalDocuments } from "@/hooks/use-legal";
 import { useSession } from "@/hooks/use-session";
 import { ApiClientError } from "@/lib/api/client";
 import { safeRedirect } from "@/lib/utils/redirect";
@@ -61,7 +62,8 @@ const registerSchema = z
     city: z.string().min(2, "Enter your city/municipality."),
     province: z.string().min(2, "Enter your province."),
     postalCode: z.string().min(4, "Enter your postal code."),
-    acceptTerms: z.boolean().refine((value) => value, "You must accept the terms to continue."),
+    acceptTerms: z.boolean().refine((value) => value, "You must accept the Terms and Conditions to create an account."),
+    acknowledgePrivacy: z.boolean().refine((value) => value, "Please confirm that you have read the Data Privacy Policy."),
   })
   .refine((data) => data.password === data.passwordConfirmation, {
     message: "Passwords do not match.",
@@ -84,6 +86,7 @@ const defaultValues: RegisterValues = {
   province: "",
   postalCode: "",
   acceptTerms: false,
+  acknowledgePrivacy: false,
 };
 
 /** Backend validation keys (RegisterRequest) → form fields. */
@@ -101,6 +104,10 @@ const serverFieldMap: Record<string, keyof RegisterValues> = {
   "shippingAddress.city": "city",
   "shippingAddress.state": "province",
   "shippingAddress.postalCode": "postalCode",
+  acceptTerms: "acceptTerms",
+  termsDocumentId: "acceptTerms",
+  acknowledgePrivacy: "acknowledgePrivacy",
+  privacyDocumentId: "acknowledgePrivacy",
 };
 
 export function RegisterForm() {
@@ -111,6 +118,10 @@ export function RegisterForm() {
   const redirectTo = safeRedirect(searchParams.get("redirect"), "/account");
   const { hydrated, isAuthenticated } = useSession();
   const register = useRegister();
+  const legal = useLegalDocuments();
+  const terms = legal.data?.terms ?? null;
+  const privacy = legal.data?.privacy ?? null;
+  const legalUnavailable = legal.isSuccess && (!terms || !privacy);
 
   const form = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
@@ -125,6 +136,8 @@ export function RegisterForm() {
   }, [hydrated, isAuthenticated, redirectTo, register.isPending, register.isSuccess, router]);
 
   function onSubmit(values: RegisterValues) {
+    // The backend re-checks that these are the published versions and records the acceptance.
+    if (!terms || !privacy) return;
     const phone = `${values.phonePrefix} ${values.phone.trim()}`;
     const recipientName = `${values.firstName.trim()} ${values.lastName.trim()}`;
 
@@ -146,6 +159,10 @@ export function RegisterForm() {
           state: values.province.trim(),
           postalCode: values.postalCode.trim(),
         },
+        acceptTerms: values.acceptTerms,
+        termsDocumentId: terms.id,
+        acknowledgePrivacy: values.acknowledgePrivacy,
+        privacyDocumentId: privacy.id,
       },
       {
         onSuccess: ({ user, verificationEmailSent }) => {
@@ -158,6 +175,12 @@ export function RegisterForm() {
             for (const [key, messages] of Object.entries(error.errors)) {
               const field = serverFieldMap[key];
               if (field) form.setError(field, { type: "server", message: messages[0] });
+            }
+            if (error.errors.termsDocumentId || error.errors.privacyDocumentId) {
+              // A newer version was published meanwhile: load it and ask again.
+              form.setValue("acceptTerms", false);
+              form.setValue("acknowledgePrivacy", false);
+              void legal.refetch();
             }
           }
         },
@@ -513,26 +536,78 @@ export function RegisterForm() {
                 </div>
               </div>
 
-              {/* Terms Checkbox */}
-              <FormField
-                control={form.control}
-                name="acceptTerms"
-                render={({ field }) => (
-                  <FormItem className="flex items-center space-x-2 space-y-0 pt-2">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={(checked) => field.onChange(Boolean(checked))}
-                        className="rounded border-slate-300 data-[state=checked]:bg-[#FF2A7A] data-[state=checked]:border-[#FF2A7A]"
-                      />
-                    </FormControl>
-                    <label className="text-xs text-slate-600 leading-none">
-                      I agree to the <span className="font-semibold text-[#5B3DF5]">Terms and Conditions</span> and{" "}
-                      <span className="font-semibold text-[#5B3DF5]">Privacy Policy</span> of SofiaCart.
-                    </label>
-                  </FormItem>
-                )}
-              />
+              {/* Terms and Privacy Policy: two separate confirmations of the published versions */}
+              <fieldset className="space-y-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4">
+                <legend className="px-1 text-xs font-bold text-[#1E1B4B]">Terms and Data Privacy</legend>
+                {legal.isPending ? (
+                  <p role="status" className="text-xs text-slate-500">Loading the Terms and Conditions and Data Privacy Policy…</p>
+                ) : legal.isError ? (
+                  <InlineError error={legal.error} />
+                ) : legalUnavailable ? (
+                  <p role="alert" className="text-xs text-amber-700">
+                    Registration is temporarily unavailable because the{" "}
+                    {!terms ? "Terms and Conditions" : "Data Privacy Policy"} is being updated. Please try again shortly.
+                  </p>
+                ) : terms && privacy ? (
+                  <>
+                    <FormField
+                      control={form.control}
+                      name="acceptTerms"
+                      render={({ field }) => (
+                        <FormItem className="space-y-1">
+                          <div className="flex items-start gap-2">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value}
+                                onCheckedChange={(checked) => field.onChange(Boolean(checked))}
+                                className="mt-0.5 rounded border-slate-300 data-[state=checked]:bg-[#FF2A7A] data-[state=checked]:border-[#FF2A7A]"
+                              />
+                            </FormControl>
+                            <FormLabel className="text-xs font-normal leading-snug text-slate-600">
+                              I have read and agree to the{" "}
+                              <Link href="/terms-and-conditions" target="_blank" className="font-semibold text-[#5B3DF5] hover:underline">
+                                Terms and Conditions<span className="sr-only"> (opens in a new tab)</span>
+                              </Link>{" "}
+                              ({terms.versionLabel ? `version ${terms.versionLabel}` : `version ${terms.version}`}).
+                            </FormLabel>
+                          </div>
+                          <FormMessage className="text-[10px]" />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="acknowledgePrivacy"
+                      render={({ field }) => (
+                        <FormItem className="space-y-1">
+                          <div className="flex items-start gap-2">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value}
+                                onCheckedChange={(checked) => field.onChange(Boolean(checked))}
+                                className="mt-0.5 rounded border-slate-300 data-[state=checked]:bg-[#FF2A7A] data-[state=checked]:border-[#FF2A7A]"
+                              />
+                            </FormControl>
+                            <FormLabel className="text-xs font-normal leading-snug text-slate-600">
+                              I acknowledge that I have read the{" "}
+                              <Link href="/privacy-policy" target="_blank" className="font-semibold text-[#5B3DF5] hover:underline">
+                                Data Privacy Policy<span className="sr-only"> (opens in a new tab)</span>
+                              </Link>{" "}
+                              ({privacy.versionLabel ? `version ${privacy.versionLabel}` : `version ${privacy.version}`}), which explains how
+                              SofiaCart processes my personal data.
+                            </FormLabel>
+                          </div>
+                          <FormMessage className="text-[10px]" />
+                        </FormItem>
+                      )}
+                    />
+                    <p className="text-[11px] leading-snug text-slate-500">
+                      This acknowledgment is not consent to optional processing such as marketing. You can manage promotional
+                      emails in your account settings.
+                    </p>
+                  </>
+                ) : null}
+              </fieldset>
 
               {register.isError && !(register.error instanceof ApiClientError && register.error.status === 422) ? (
                 <InlineError error={register.error} />
@@ -541,7 +616,7 @@ export function RegisterForm() {
               {/* Submit Button */}
               <Button
                 type="submit"
-                disabled={register.isPending}
+                disabled={register.isPending || !terms || !privacy}
                 className="w-full h-11 rounded-full bg-gradient-to-r from-[#FF6B00] via-[#FF2A7A] to-[#FF2A7A] text-sm font-bold text-white shadow-md hover:opacity-95"
               >
                 {register.isPending ? "Creating your account…" : "Create Account"}

@@ -13,6 +13,37 @@ export interface User {
   createdAt?: string | null;
 }
 
+export type LegalDocumentType = "terms" | "privacy";
+
+/** A published buyer legal document (sofiacart-website-backend LegalDocumentResource). */
+export interface LegalDocument {
+  id: number;
+  type: LegalDocumentType;
+  title: string;
+  version: number;
+  versionLabel: string | null;
+  effectiveDate: string | null;
+  publishedAt: string | null;
+  format: "pdf" | "docx";
+  mimeType: string;
+  fileSize: number;
+  fileUrl: string;
+  downloadUrl: string;
+}
+
+/** `null` means the document is not published (temporarily unavailable). */
+export type PublishedLegalDocuments = Record<LegalDocumentType, LegalDocument | null>;
+
+/** A consent the server recorded at registration (LegalConsentResource). */
+export interface LegalConsent {
+  documentId: number;
+  type: LegalDocumentType;
+  title: string;
+  version: number;
+  action: "accepted" | "acknowledged";
+  acceptedAt: string | null;
+}
+
 export interface AuthTokens {
   accessToken: string;
   tokenType?: string;

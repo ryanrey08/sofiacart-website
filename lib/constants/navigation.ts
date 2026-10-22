@@ -31,4 +31,6 @@ export const footerNavigation = [
   { href: "/vouchers", label: "Vouchers" },
   { href: "/cart", label: "Cart" },
   { href: "/account/orders", label: "My Orders" },
+  { href: "/terms-and-conditions", label: "Terms & Conditions" },
+  { href: "/privacy-policy", label: "Privacy Policy" },
 ] as const;

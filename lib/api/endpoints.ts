@@ -79,6 +79,10 @@ export const apiEndpoints = {
     list: "/vouchers",
     validate: "/vouchers/validate",
   },
+  legal: {
+    documents: "/legal-documents",
+    consents: "/account/legal-consents",
+  },
 } as const;
 
 export type ApiEndpoints = typeof apiEndpoints;

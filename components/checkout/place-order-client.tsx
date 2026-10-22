@@ -270,7 +270,15 @@ export function PlaceOrderClient() {
               <div className="flex items-start gap-2 pl-1">
                 <Checkbox id="agree" checked={agreed} onCheckedChange={(checked) => setAgreed(Boolean(checked))} className="mt-0.5" />
                 <label htmlFor="agree" className="cursor-pointer text-xs text-slate-700">
-                  I agree to the SofiaCart Terms and Conditions and Privacy Policy.
+                  I agree to the SofiaCart{" "}
+                  <Link href="/terms-and-conditions" target="_blank" className="font-semibold text-brand hover:underline">
+                    Terms and Conditions<span className="sr-only"> (opens in a new tab)</span>
+                  </Link>{" "}
+                  and have read the{" "}
+                  <Link href="/privacy-policy" target="_blank" className="font-semibold text-brand hover:underline">
+                    Data Privacy Policy<span className="sr-only"> (opens in a new tab)</span>
+                  </Link>
+                  .
                 </label>
               </div>
             </div>
