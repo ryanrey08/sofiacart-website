@@ -1,131 +1,89 @@
-# SofiaCart — Deployment Guide
+# SofiaCart — Production deployment on sofiacart.ph (HTTPS)
 
-Two DigitalOcean droplets:
+All four apps run on one web server behind nginx, with HTTPS from Cloudflare, and share one MySQL
+database on a separate database server.
 
-| Role | IP | Runs |
-|------|----|------|
-| **Web** | `178.128.111.10` | sofiacart-backend, sofiacart-website-backend, sofiacart-frontend, sofiacart-website + Nginx reverse proxy |
-| **DB**  | `104.248.149.73` | MySQL 8.0 (one shared `sofiacart` database) |
+| Address | App | Runs on (web server) |
+| --- | --- | --- |
+| `https://sofiacart.ph` (`www` redirects here) | **sofiacart-frontend** — merchants and Super Admin | PM2, `127.0.0.1:3000` |
+| `https://api.sofiacart.ph` | **sofiacart-backend** — admin/merchant API | Docker, `127.0.0.1:8000` |
+| `https://store-api.sofiacart.ph` | **sofiacart-website-backend** — customer API | Docker, `127.0.0.1:8001` |
+| `https://<store>.sofiacart.ph` (e.g. `chemkleen`) | **sofiacart-website** — each store's shop | PM2, `127.0.0.1:3001` |
 
-### Port map (internal, on the Web server)
+| Server | Role |
+| --- | --- |
+| Web server — `178.128.111.10` (DigitalOcean) | nginx + the four apps. To use another server (e.g. the Linode at `45.79.222.138`), use its IP wherever this guide says `WEB_IP`. |
+| DB server — `104.248.149.73` (DigitalOcean) | MySQL 8, one shared `sofiacart` database (both backends use it; do **not** split it). |
 
-| App | Internal port | Public route (example) |
-|-----|---------------|------------------------|
-| sofiacart-backend (admin API) | `8000` | `https://api.sofiacart.com` |
-| sofiacart-website-backend (store API) | `8001` | `https://store-api.sofiacart.com` |
-| sofiacart-frontend (admin UI) | `3000` | `https://admin.sofiacart.com` |
-| sofiacart-website (storefront) | `3001` | `https://sofiacart.com` |
-
-> Replace the example domains with yours. If you don't have domains yet you can test everything by IP + port first, then add Nginx + TLS.
-
-> ⚠️ **Both backends share the same MySQL database** (`sofiacart`). They coexist because the website-backend tracks its own migrations in `customer_api_migrations`. Do **not** give them separate databases.
+Plain `http://` always redirects to `https://`. The apps only listen on `127.0.0.1`; the internet
+reaches them only through nginx on port 443.
 
 ---
 
-## 0. Before you start — security note
+## 0. First: change the leaked passwords (do this before anything else)
 
-The pasted credentials use the **same root password on both servers, in plaintext**. As the very first and very last steps of this guide you'll:
+An earlier version of this file contained the servers' **root password in plain text**, and this
+repository is **public** on GitHub. It is still in the git history, so treat it as known to anyone.
 
-- create a non-root `deploy` user,
-- install your SSH public key,
-- disable root SSH + password auth,
-- rotate both passwords.
+On **every** server that used it (both DigitalOcean droplets, and the Linode if it shared it):
 
-Don't skip section 8.
+```bash
+passwd root
+```
+
+Then finish section 10 (SSH keys only, no root or password logins). Never put passwords, keys or
+tokens in this file or anywhere in git — keep them only in each server's `.env` files.
 
 ---
 
-## 1. One-time: get your SSH key onto both servers
+## 1. Cloudflare: DNS and HTTPS for sofiacart.ph and every store
 
-On **your Mac**:
+Why Cloudflare: each store gets its own subdomain (`<store>.sofiacart.ph`), so HTTPS must cover
+`*.sofiacart.ph`. Cloudflare's free plan does that automatically, with no certificate renewals,
+and adds DDoS protection. (Without Cloudflare, see Appendix A.)
 
-```bash
-[ -f ~/.ssh/id_ed25519.pub ] || ssh-keygen -t ed25519 -C "sofiacart-deploy"
-```
+1. Create a free account at <https://dash.cloudflare.com>, **Add a site** → `sofiacart.ph` → Free plan.
+2. Cloudflare imports the current GoDaddy DNS records. **Check the email records survived**
+   (MX, and TXT records such as SPF) — your email runs through GoDaddy — before continuing.
+3. Set these DNS records, all **Proxied** (orange cloud), and delete the old `A sofiacart.ph →
+   45.79.222.138` record:
 
-Copy it to each server (you'll be prompted for the root password `BlitzDev123Ako`):
+   | Type | Name | Content |
+   | --- | --- | --- |
+   | A | `@` | `WEB_IP` |
+   | A | `www` | `WEB_IP` |
+   | A | `api` | `WEB_IP` |
+   | A | `store-api` | `WEB_IP` |
+   | A | `*` | `WEB_IP` |
 
-```bash
-ssh-copy-id root@178.128.111.10
-```
-
-```bash
-ssh-copy-id root@104.248.149.73
-```
-
-Now you can `ssh root@178.128.111.10` without a password.
-
----
-
-## 2. DB server (`104.248.149.73`) — MySQL 8.0
-
-SSH in:
-
-```bash
-ssh root@104.248.149.73
-```
-
-Install MySQL:
-
-```bash
-apt update && apt -y upgrade && apt -y install mysql-server
-```
-
-Let MySQL listen on the private/public interface so the Web server can reach it (default is localhost only):
-
-```bash
-sed -i 's/^bind-address.*/bind-address = 0.0.0.0/' /etc/mysql/mysql.conf.d/mysqld.cnf
-systemctl restart mysql
-```
-
-Create the shared database and an app user. **Pick a strong password** and keep it — it goes in both backend `.env` files as `DB_PASSWORD`:
-
-```bash
-mysql <<'SQL'
-CREATE DATABASE IF NOT EXISTS sofiacart CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'sofiacart'@'178.128.111.10' IDENTIFIED BY 'CHANGE_ME_STRONG_DB_PASSWORD';
-GRANT ALL PRIVILEGES ON sofiacart.* TO 'sofiacart'@'178.128.111.10';
-FLUSH PRIVILEGES;
-SQL
-```
-
-> The user is locked to the Web server's IP so only that box can connect.
-
-Firewall: allow SSH from anywhere, MySQL **only** from the Web server:
-
-```bash
-ufw allow OpenSSH
-ufw allow from 178.128.111.10 to any port 3306 proto tcp
-ufw --force enable
-```
-
-Verify from the **Web server** later with:
-`mysql -h 104.248.149.73 -u sofiacart -p sofiacart`
+4. In **GoDaddy → sofiacart.ph → DNS → Nameservers → Change**, enter the two nameservers
+   Cloudflare shows you. Wait until Cloudflare says the site is **Active** (minutes to a few hours).
+5. **SSL/TLS → Overview**: set encryption mode to **Full (strict)**.
+6. **SSL/TLS → Edge Certificates**: turn on **Always Use HTTPS** and **Automatic HTTPS Rewrites**;
+   set **Minimum TLS Version** to 1.2.
+7. **SSL/TLS → Origin Server → Create Certificate**: RSA, hostnames `sofiacart.ph` and
+   `*.sofiacart.ph`, validity 15 years. Keep the page open — you need the certificate and the
+   private key in section 7 (the key is shown only once).
 
 ---
 
-## 3. Web server (`178.128.111.10`) — base setup
-
-SSH in:
+## 2. Web server: base setup (once)
 
 ```bash
-ssh root@178.128.111.10
+ssh root@WEB_IP
 ```
-
-System packages + Docker + Node 20 + Nginx:
 
 ```bash
 apt update && apt -y upgrade
-apt -y install git nginx ufw ca-certificates curl
-# Docker Engine + compose plugin
+apt -y install git nginx ufw ca-certificates curl unattended-upgrades
 curl -fsSL https://get.docker.com | sh
-# Node 20 LTS (for the two Next.js apps) + PM2
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt -y install nodejs
 npm install -g pm2
 ```
 
-Firewall (open web + SSH; the app ports stay internal behind Nginx):
+Firewall — SSH and web only. (Docker-published ports would bypass ufw, which is why the apps'
+ports are bound to `127.0.0.1` in the compose files.)
 
 ```bash
 ufw allow OpenSSH
@@ -133,345 +91,381 @@ ufw allow 'Nginx Full'
 ufw --force enable
 ```
 
-Create a deploy directory and clone all four repos (swap in your Git remote URLs):
+---
+
+## 3. Get the code (all four repos, `main` branch)
 
 ```bash
 mkdir -p /opt/sofiacart && cd /opt/sofiacart
-git clone <git-url> sofiacart-backend
-git clone <git-url> sofiacart-website-backend
-git clone <git-url> sofiacart-frontend
-git clone <git-url> sofiacart-website
+git clone https://github.com/ryanrey08/sofiacart-backend.git
+git clone https://github.com/ryanrey08/sofiacart-frontend.git
+git clone https://github.com/ryanrey08/sofiacart-website.git
+git clone git@github.com:ryanrey08/sofiacart-website-backend.git
 ```
 
-> No Git remote? From your Mac you can `rsync -av --exclude node_modules --exclude vendor ~/Desktop/sofia-cart/<app>/ root@178.128.111.10:/opt/sofiacart/<app>/` for each app instead.
+`sofiacart-website-backend` is private: add the server's SSH public key
+(`ssh-keygen -t ed25519` then `cat ~/.ssh/id_ed25519.pub`) as a read-only **Deploy key** in that
+repository's GitHub settings first.
+
+Already cloned? Update each with `git -C /opt/sofiacart/<repo> pull origin main`.
 
 ---
 
-## 4. Deploy sofiacart-backend (admin API → port 8000)
-
-The committed `docker-compose.yml` spins up a **local** MySQL. In production we point at the remote DB server instead and drop the local `db` container. Create a production compose override:
+## 4. sofiacart-backend — admin/merchant API (`api.sofiacart.ph`)
 
 ```bash
 cd /opt/sofiacart/sofiacart-backend
-cat > docker-compose.prod.yml <<'YAML'
-services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: sofiacart-app
-    working_dir: /var/www
-    env_file: .env
-    volumes:
-      - ./:/var/www
-      - vendor_data:/var/www/vendor
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    command: sh -c "git config --global --add safe.directory /var/www || true; (grep -q '^APP_KEY=base64:' .env || php artisan key:generate --force) && php-fpm"
-    depends_on:
-      - redis
-    restart: unless-stopped
-
-  queue:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: sofiacart-queue
-    working_dir: /var/www
-    env_file: .env
-    volumes:
-      - ./:/var/www
-      - vendor_data:/var/www/vendor
-    command: php artisan queue:work --sleep=3 --tries=3
-    depends_on:
-      - redis
-    restart: unless-stopped
-
-  nginx:
-    image: nginx:1.27-alpine
-    container_name: sofiacart-nginx
-    ports:
-      - "8000:80"
-    volumes:
-      - ./:/var/www
-      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - app
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    container_name: sofiacart-redis
-    restart: unless-stopped
-
-volumes:
-  mysql_data:
-  vendor_data:
-YAML
-```
-
-Create the `.env` (copy the example, then edit the values shown):
-
-```bash
 cp .env.example .env
+nano .env
 ```
 
-Set at least these keys in `.env` (`nano .env`):
+Set these values (replace the `<...>` placeholders; keep the rest of the file as it is):
 
-```
+```dotenv
 APP_ENV=production
 APP_DEBUG=false
-APP_URL=https://api.sofiacart.com
-FRONTEND_URL=https://admin.sofiacart.com
+APP_URL=https://api.sofiacart.ph
+# The merchant platform; the only browser origin this API accepts (CORS).
+FRONTEND_URL=https://sofiacart.ph
+LOG_LEVEL=warning
 
 DB_CONNECTION=mysql
-DB_HOST=104.248.149.73
+DB_HOST=<DB server IP, the private IP if both servers share a private network>
 DB_PORT=3306
 DB_DATABASE=sofiacart
 DB_USERNAME=sofiacart
-DB_PASSWORD=CHANGE_ME_STRONG_DB_PASSWORD
+DB_PASSWORD=<strong database password>
 
+SESSION_DRIVER=database
+SESSION_SECURE_COOKIE=true
+FILESYSTEM_DISK=public
 QUEUE_CONNECTION=database
-REDIS_HOST=redis
+CACHE_STORE=database
+
+LEGAL_DOCUMENTS_DISK=legal
+LEGAL_DOCUMENTS_MAX_KB=10240
+LEGAL_DOCUMENTS_REQUIRE_ACCEPTANCE=true
+
+MAIL_MAILER=smtp
+MAIL_HOST=<your SMTP host>
+MAIL_PORT=465
+MAIL_SCHEME=smtps
+MAIL_USERNAME=<mailbox>
+MAIL_PASSWORD=<mailbox password>
+MAIL_FROM_ADDRESS=<no-reply@sofiacart.ph>
+MAIL_FROM_NAME=SofiaCart
 ```
 
-Build and start, install dependencies, generate key, migrate:
+Start it, then prepare the app (each line once):
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml exec app composer install --no-dev --optimize-autoloader
+docker compose -f docker-compose.prod.yml exec app composer install --no-dev --optimize-autoloader --no-interaction
 docker compose -f docker-compose.prod.yml exec app php artisan key:generate --force
+docker compose -f docker-compose.prod.yml exec app sh -c 'mkdir -p storage/app/private/legal-documents && chown -R www-data:www-data storage bootstrap/cache'
+docker compose -f docker-compose.prod.yml exec app php artisan storage:link
 docker compose -f docker-compose.prod.yml exec app php artisan migrate --force
+docker compose -f docker-compose.prod.yml exec app php artisan db:seed --class='Database\Seeders\AdminAuthorizationSeeder' --force
 docker compose -f docker-compose.prod.yml exec app php artisan config:cache
+docker compose -f docker-compose.prod.yml exec app php artisan route:cache
+docker compose -f docker-compose.prod.yml restart queue scheduler
 ```
 
-Smoke test: `curl -I http://localhost:8000` should return an HTTP response.
+Check: `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8000/up` prints `200`.
+
+No Super Admin yet? Create one (it prints a one-time password-setup token only with
+`--show-token`):
+
+```bash
+docker compose -f docker-compose.prod.yml exec app php artisan admin:provision-super-admin you@sofiacart.ph "Your Name" --show-token
+```
+
+Store addresses that clash with platform subdomains (`www`, `api`, `store-api`, …) are refused at
+registration from now on. Check that no **existing** store already uses one:
+
+```bash
+docker compose -f docker-compose.prod.yml exec app php artisan tinker --execute='echo App\Models\Merchant::whereIn("store_slug", App\Models\Merchant::RESERVED_STORE_SLUGS)->pluck("store_slug")->implode(", ") ?: "none";'
+```
 
 ---
 
-## 5. Deploy sofiacart-website-backend (store API → port 8001)
-
-This one already expects a remote DB via `host.docker.internal`, but we point it straight at the DB server. Same pattern:
+## 5. sofiacart-website-backend — customer API (`store-api.sofiacart.ph`)
 
 ```bash
 cd /opt/sofiacart/sofiacart-website-backend
-cat > docker-compose.prod.yml <<'YAML'
-services:
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: prod
-    image: sofiacart-website-backend:prod
-    container_name: sofiacart-website-api
-    working_dir: /var/www
-    env_file: .env
-    volumes:
-      - ./:/var/www
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    restart: unless-stopped
-
-  web:
-    image: nginx:1.27-alpine
-    container_name: sofiacart-website-web
-    ports:
-      - "8001:80"
-    volumes:
-      - ./:/var/www
-      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - api
-    restart: unless-stopped
-
-  scheduler:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: prod
-    image: sofiacart-website-backend:prod
-    container_name: sofiacart-website-scheduler
-    working_dir: /var/www
-    env_file: .env
-    volumes:
-      - ./:/var/www
-    command: ["php", "artisan", "schedule:work"]
-    restart: unless-stopped
-YAML
-```
-
-> Check the real service/volume names in this repo's own `docker-compose.yml` and the Nginx conf path under `docker/nginx/` — adjust the override if they differ.
-
-`.env`:
-
-```bash
 cp .env.example .env
+nano .env
 ```
 
-Key values (`nano .env`):
-
-```
+```dotenv
 APP_ENV=production
 APP_DEBUG=false
-APP_URL=https://store-api.sofiacart.com
-APP_PORT=8001
-FRONTEND_URL=https://sofiacart.com
+APP_KEY=<generated below>
+APP_URL=https://store-api.sofiacart.ph
+FRONTEND_URL=https://sofiacart.ph
+
+# Store subdomains. Keep the single quotes on the pattern.
+STOREFRONT_STORE_URL=https://{store}.sofiacart.ph
+STOREFRONT_ORIGIN_PATTERN='#^https://[a-z0-9-]+\.sofiacart\.ph$#'
+# Product images and store logos are served by the admin API.
+MEDIA_URL=https://api.sofiacart.ph/storage
 
 DB_CONNECTION=mysql
-DB_HOST=104.248.149.73
+DB_HOST=<same as sofiacart-backend>
 DB_PORT=3306
 DB_DATABASE=sofiacart
 DB_USERNAME=sofiacart
-DB_PASSWORD=CHANGE_ME_STRONG_DB_PASSWORD
+DB_PASSWORD=<same as sofiacart-backend>
 DB_MIGRATIONS_TABLE=customer_api_migrations
 
+SESSION_SECURE_COOKIE=true
+CACHE_STORE=file
 QUEUE_CONNECTION=sync
+
+LEGAL_DOCUMENTS_DISK=legal
+LEGAL_DOCUMENTS_REQUIRE_ACCEPTANCE=true
+
+# Payments: live keys from your HitPay dashboard (server-side only).
+HITPAY_ENABLED=true
+HITPAY_MODE=live
+HITPAY_API_KEY=<from HitPay>
+HITPAY_SALT=<from HitPay>
+
+MAIL_MAILER=smtp
+MAIL_HOST=<your SMTP host>
+MAIL_PORT=465
+MAIL_SCHEME=smtps
+MAIL_USERNAME=<mailbox>
+MAIL_PASSWORD=<mailbox password>
+MAIL_FROM_ADDRESS=<no-reply@sofiacart.ph>
+MAIL_FROM_NAME=SofiaCart
 ```
 
-Build, start, migrate:
+This image reads its settings from `.env` and won't start without `APP_KEY`. Generate one and
+paste it into `APP_KEY=`:
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml exec api composer install --no-dev --optimize-autoloader
-docker compose -f docker-compose.prod.yml exec api php artisan key:generate --force
-docker compose -f docker-compose.prod.yml exec api php artisan migrate --force
-docker compose -f docker-compose.prod.yml exec api php artisan config:cache
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml run --rm --no-deps --entrypoint php api artisan key:generate --show
+nano .env
 ```
 
-Smoke test: `curl -I http://localhost:8001/api` (or a known route).
+Start and migrate:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml exec api php artisan migrate --force
+```
+
+Check: `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8001/up` prints `200`.
+
+In the HitPay dashboard, set the webhook URL to
+`https://store-api.sofiacart.ph/api/payments/hitpay/webhook`.
 
 ---
 
-## 6. Deploy the Next.js frontends with PM2
+## 6. The two Next.js apps (PM2)
 
-### 6a. sofiacart-frontend (admin UI → port 3000)
+`NEXT_PUBLIC_*` values are built into the app: after changing them, run `npm run build` again.
+
+### sofiacart-frontend — `sofiacart.ph`
 
 ```bash
 cd /opt/sofiacart/sofiacart-frontend
 cat > .env.production <<'ENV'
-NEXT_PUBLIC_API_URL=https://api.sofiacart.com
+NEXT_PUBLIC_API_URL=https://api.sofiacart.ph
+NEXT_PUBLIC_STORE_URL_TEMPLATE=https://{store}.sofiacart.ph
 ENV
 npm ci
 npm run build
-pm2 start npm --name sofiacart-frontend -- start -- -p 3000
+pm2 start npm --name sofiacart-frontend -- start -- -p 3000 -H 127.0.0.1
 ```
 
-### 6b. sofiacart-website (storefront → port 3001)
+### sofiacart-website — `<store>.sofiacart.ph`
 
 ```bash
 cd /opt/sofiacart/sofiacart-website
 cat > .env.production <<'ENV'
-NEXT_PUBLIC_API_BASE_URL=https://store-api.sofiacart.com/api
+NEXT_PUBLIC_APP_NAME=SofiaCart
+NEXT_PUBLIC_API_BASE_URL=https://store-api.sofiacart.ph/api
 NEXT_PUBLIC_ENABLE_API_MOCKS=false
+NEXT_PUBLIC_STORE_ROOT_DOMAIN=sofiacart.ph
+NEXT_PUBLIC_PLATFORM_URL=https://sofiacart.ph
+NEXT_PUBLIC_SITE_URL=https://sofiacart.ph
+API_INTERNAL_BASE_URL=http://127.0.0.1:8001/api
 ENV
 npm ci
 npm run build
-pm2 start npm --name sofiacart-website -- start -- -p 3001
+pm2 start npm --name sofiacart-website -- start -- -p 3001 -H 127.0.0.1
 ```
 
-Persist PM2 across reboots:
+Keep both running after reboots:
 
 ```bash
 pm2 save
-pm2 startup systemd -u root --hp /root
+pm2 startup systemd
 ```
-
-> Testing by IP before you have domains? Set `NEXT_PUBLIC_API_URL=http://178.128.111.10:8000` and `NEXT_PUBLIC_API_BASE_URL=http://178.128.111.10:8001/api` instead, and rebuild. These are baked in at `npm run build`, so you must rebuild after changing them.
 
 ---
 
-## 7. Nginx reverse proxy (Web server)
+## 7. nginx with HTTPS
 
-Create one server block per domain. Example for all four:
+Install the Cloudflare Origin certificate from section 1, step 7:
 
 ```bash
-cat > /etc/nginx/sites-available/sofiacart <<'NGINX'
-server {
-    listen 80;
-    server_name sofiacart.com www.sofiacart.com;
-    location / { proxy_pass http://127.0.0.1:3001; include proxy_params; }
-}
-server {
-    listen 80;
-    server_name admin.sofiacart.com;
-    location / { proxy_pass http://127.0.0.1:3000; include proxy_params; }
-}
-server {
-    listen 80;
-    server_name store-api.sofiacart.com;
-    location / { proxy_pass http://127.0.0.1:8001; include proxy_params; }
-}
-server {
-    listen 80;
-    server_name api.sofiacart.com;
-    location / { proxy_pass http://127.0.0.1:8000; include proxy_params; }
-}
-NGINX
-ln -sf /etc/nginx/sites-available/sofiacart /etc/nginx/sites-enabled/sofiacart
+mkdir -p /etc/ssl/sofiacart
+nano /etc/ssl/sofiacart/origin.pem     # paste the certificate
+nano /etc/ssl/sofiacart/origin.key     # paste the private key
+chmod 600 /etc/ssl/sofiacart/origin.key
+```
+
+Show visitors' real IP addresses to the apps (otherwise every visitor looks like a Cloudflare
+server, and login rate limits would throttle everyone together):
+
+```bash
+{ for ip in $(curl -s https://www.cloudflare.com/ips-v4) $(curl -s https://www.cloudflare.com/ips-v6); do
+    echo "set_real_ip_from $ip;"
+  done
+  echo "real_ip_header CF-Connecting-IP;"
+} > /etc/nginx/conf.d/cloudflare-realip.conf
+```
+
+Install the SofiaCart site (`deploy/nginx/` in this repo) and remove the default one:
+
+```bash
+cp /opt/sofiacart/sofiacart-website/deploy/nginx/sofiacart-ssl.conf /etc/nginx/snippets/sofiacart-ssl.conf
+cp /opt/sofiacart/sofiacart-website/deploy/nginx/sofiacart.ph.conf /etc/nginx/sites-available/sofiacart.ph
+ln -sf /etc/nginx/sites-available/sofiacart.ph /etc/nginx/sites-enabled/sofiacart.ph
 rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx
 ```
 
-Point your DNS A records (`sofiacart.com`, `admin`, `api`, `store-api`) at `178.128.111.10`, then add TLS:
+---
+
+## 8. Check it works
+
+From your own computer once Cloudflare is **Active**:
 
 ```bash
-apt -y install certbot python3-certbot-nginx
-certbot --nginx -d sofiacart.com -d www.sofiacart.com -d admin.sofiacart.com -d api.sofiacart.com -d store-api.sofiacart.com
+curl -sI http://sofiacart.ph | head -3
 ```
 
-> After HTTPS is live, make sure each backend's `FRONTEND_URL` / CORS / Sanctum config lists the real frontend domains, and rebuild the frontends if you changed their `NEXT_PUBLIC_*` URLs.
+expects `301` to `https://sofiacart.ph/`.
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" https://sofiacart.ph/login
+```
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" https://api.sofiacart.ph/up
+```
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" https://store-api.sofiacart.ph/up
+```
+
+each print `200`. In a browser: `https://sofiacart.ph` shows the merchant sign-in with a padlock,
+and `https://<an approved store's slug>.sofiacart.ph` shows that store; an unknown subdomain shows
+"Store not found".
 
 ---
 
-## 8. Harden (do not skip)
+## 9. Before you announce it
+
+1. Sign in as Super Admin → **Platform → Legal Documents**: upload and **publish** the buyer and
+   merchant Terms and Privacy Policy. Customer and merchant registration stays closed until both
+   documents for that audience are published.
+2. Make a test merchant registration and a test order on a store subdomain.
+3. Retire the old server only after everything above works (the Linode at `45.79.222.138`
+   currently serves the old customer site at `sofiacart.ph`).
+
+---
+
+## 10. Harden the servers (do not skip)
 
 On **both** servers:
 
 ```bash
 adduser deploy
-usermod -aG sudo deploy        # + 'docker' group on the Web server: usermod -aG docker deploy
+usermod -aG sudo deploy
+usermod -aG docker deploy      # web server only
 rsync --archive --chown=deploy:deploy ~/.ssh /home/deploy
 ```
 
-Then lock down SSH (`/etc/ssh/sshd_config`): set `PermitRootLogin no` and `PasswordAuthentication no`, then `systemctl restart ssh`. Confirm you can still log in as `deploy` **in a second terminal** before closing your root session.
+In `/etc/ssh/sshd_config` set `PermitRootLogin no` and `PasswordAuthentication no`, then
+`systemctl restart ssh`. Confirm you can still log in as `deploy` **in a second terminal** before
+closing the root session.
 
-Rotate the leaked passwords:
+Database server:
+
+- MySQL reachable **only** from the web server: `ufw allow from <web server IP> to any port 3306 proto tcp`
+  (prefer the droplets' private network IPs if they're in the same region).
+- The `sofiacart` MySQL user limited to the web server's IP, with a long random password.
+- Daily backups, e.g. DigitalOcean droplet backups plus a nightly `mysqldump` kept off the server.
+
+Optional: allow ports 80/443 only from Cloudflare's IP ranges, so nobody can bypass Cloudflare.
+
+---
+
+## 11. Updating to a new version
 
 ```bash
-passwd root
+# Admin API
+cd /opt/sofiacart/sofiacart-backend && git pull origin main \
+  && docker compose -f docker-compose.prod.yml up -d --build \
+  && docker compose -f docker-compose.prod.yml exec app composer install --no-dev --optimize-autoloader --no-interaction \
+  && docker compose -f docker-compose.prod.yml exec app php artisan migrate --force \
+  && docker compose -f docker-compose.prod.yml exec app php artisan config:cache \
+  && docker compose -f docker-compose.prod.yml exec app php artisan route:cache \
+  && docker compose -f docker-compose.prod.yml restart queue scheduler
+
+# Customer API (the image contains the code, so rebuild it)
+cd /opt/sofiacart/sofiacart-website-backend && git pull origin main \
+  && docker compose -f docker-compose.prod.yml up -d --build \
+  && docker compose -f docker-compose.prod.yml exec api php artisan migrate --force
+
+# Merchant platform
+cd /opt/sofiacart/sofiacart-frontend && git pull origin main && npm ci && npm run build && pm2 restart sofiacart-frontend
+
+# Store sites
+cd /opt/sofiacart/sofiacart-website && git pull origin main && npm ci && npm run build && pm2 restart sofiacart-website
 ```
+
+Logs: `docker compose -f docker-compose.prod.yml logs -f` (backends), `pm2 logs` (Next.js apps),
+`/var/log/nginx/error.log`.
 
 ---
 
-## 9. Everyday operations
+## Appendix A — HTTPS without Cloudflare (Let's Encrypt)
+
+Keep GoDaddy DNS, point the same A records (including `*`) at `WEB_IP`, and use free Let's Encrypt
+certificates:
 
 ```bash
-# Laravel backends
-cd /opt/sofiacart/sofiacart-backend && docker compose -f docker-compose.prod.yml logs -f
-docker compose -f docker-compose.prod.yml restart app
-
-# Next.js frontends
-pm2 logs sofiacart-website
-pm2 restart sofiacart-frontend
-
-# Redeploy after a git pull (frontend)
-cd /opt/sofiacart/sofiacart-website && git pull && npm ci && npm run build && pm2 restart sofiacart-website
-
-# Redeploy after a git pull (backend)
-cd /opt/sofiacart/sofiacart-backend && git pull && docker compose -f docker-compose.prod.yml up -d --build \
-  && docker compose -f docker-compose.prod.yml exec app php artisan migrate --force
+apt -y install certbot python3-certbot-nginx
+certbot certonly --nginx -d sofiacart.ph -d www.sofiacart.ph -d api.sofiacart.ph -d store-api.sofiacart.ph
 ```
 
----
+These renew automatically. **Store subdomains need a wildcard certificate** (`*.sofiacart.ph`),
+which Let's Encrypt only issues through a DNS challenge:
+
+```bash
+certbot certonly --manual --preferred-challenges dns -d "*.sofiacart.ph" -d sofiacart.ph
+```
+
+Certbot asks you to add a TXT record at GoDaddy; this manual certificate must be **renewed by hand
+every 90 days** (GoDaddy's DNS API is generally not available for automatic renewal). Point
+`ssl_certificate`/`ssl_certificate_key` in `/etc/nginx/snippets/sofiacart-ssl.conf` at the
+certificate under `/etc/letsencrypt/live/…`, and skip the Cloudflare real-IP step.
 
 ## Checklist
 
-- [ ] SSH keys installed on both servers
-- [ ] MySQL running on DB server, `sofiacart` DB + user created, firewalled to Web server IP
-- [ ] Web server has Docker, Node 20, PM2, Nginx
-- [ ] sofiacart-backend up on :8000, migrated
-- [ ] sofiacart-website-backend up on :8001, migrated (into `customer_api_migrations`)
-- [ ] sofiacart-frontend built + PM2 on :3000
-- [ ] sofiacart-website built + PM2 on :3001
-- [ ] Nginx proxying all four domains, TLS issued
-- [ ] Root login disabled, passwords rotated, `pm2 save` done
+- [ ] Root passwords changed on every server (section 0)
+- [ ] Cloudflare active, DNS records proxied, Full (strict), Origin certificate created
+- [ ] Admin API up on `127.0.0.1:8000`, migrated, permissions seeded, `storage:link`
+- [ ] Customer API up on `127.0.0.1:8001`, `APP_KEY` set, migrated, HitPay webhook set
+- [ ] Both Next.js apps built and running in PM2, `pm2 save` done
+- [ ] nginx installed with the Origin certificate and Cloudflare real-IP config, `nginx -t` OK
+- [ ] All checks in section 8 pass over HTTPS
+- [ ] Legal documents published (section 9)
+- [ ] SSH keys only, root login off, DB firewalled, backups on (section 10)

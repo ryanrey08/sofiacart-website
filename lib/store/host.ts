@@ -7,8 +7,16 @@
 /** The domain stores live under: "sofiacart.ph" in production, "localhost" for local development. */
 export const STORE_ROOT_DOMAIN = (process.env.NEXT_PUBLIC_STORE_ROOT_DOMAIN || "localhost").trim().toLowerCase();
 
-/** Subdomains used by the platform itself, never by a store. */
-const RESERVED_SUBDOMAINS = new Set(["www", "api", "api-admin", "admin", "seller", "app", "mail", "static", "cdn", "assets"]);
+/**
+ * Subdomains used by the platform itself, never by a store. Keep in sync with
+ * Merchant::RESERVED_STORE_SLUGS in sofiacart-backend, which refuses them at registration.
+ */
+const RESERVED_SUBDOMAINS = new Set([
+  "www", "api", "store-api", "api-admin", "admin", "seller", "sellers", "merchant", "merchants",
+  "app", "mail", "email", "smtp", "imap", "pop", "ftp", "webmail", "static", "cdn", "assets",
+  "media", "storage", "help", "support", "status", "blog", "docs", "dashboard", "store", "stores",
+  "shop", "sofiacart", "dev", "staging", "test", "demo", "beta", "ns1", "ns2", "localhost",
+]);
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
