@@ -334,6 +334,7 @@ Install the SofiaCart site (`deploy/nginx/` in this repo) and remove the default
 
 ```bash
 cp /opt/sofiacart/sofiacart-website/deploy/nginx/sofiacart-ssl.conf /etc/nginx/snippets/sofiacart-ssl.conf
+cp /opt/sofiacart/sofiacart-website/deploy/nginx/sofiacart-ssl-stores.conf /etc/nginx/snippets/sofiacart-ssl-stores.conf
 cp /opt/sofiacart/sofiacart-website/deploy/nginx/sofiacart.ph.conf /etc/nginx/sites-available/sofiacart.ph
 ln -sf /etc/nginx/sites-available/sofiacart.ph /etc/nginx/sites-enabled/sofiacart.ph
 rm -f /etc/nginx/sites-enabled/default
@@ -438,25 +439,42 @@ Logs: `docker compose -f docker-compose.prod.yml logs -f` (backends), `pm2 logs`
 
 ## Appendix A — HTTPS without Cloudflare (Let's Encrypt)
 
-Keep GoDaddy DNS, point the same A records (including `*`) at `WEB_IP`, and use free Let's Encrypt
-certificates:
+Keep GoDaddy DNS and point the same A records (`@`, `www`, `api`, `store-api`, `*`) at `WEB_IP`.
+Use two free Let's Encrypt certificates, and skip the Cloudflare real-IP step.
 
-```bash
-apt -y install certbot python3-certbot-nginx
-certbot certonly --nginx -d sofiacart.ph -d www.sofiacart.ph -d api.sofiacart.ph -d store-api.sofiacart.ph
-```
+1. **Platform names** — renews automatically (HTTP challenge; port 80 must reach this server):
 
-These renew automatically. **Store subdomains need a wildcard certificate** (`*.sofiacart.ph`),
-which Let's Encrypt only issues through a DNS challenge:
+   ```bash
+   apt -y install certbot
+   mkdir -p /var/www/letsencrypt
+   certbot certonly --webroot -w /var/www/letsencrypt --cert-name sofiacart.ph \
+     -d sofiacart.ph -d www.sofiacart.ph -d api.sofiacart.ph -d store-api.sofiacart.ph \
+     --deploy-hook "systemctl reload nginx"
+   ```
 
-```bash
-certbot certonly --manual --preferred-challenges dns -d "*.sofiacart.ph" -d sofiacart.ph
-```
+   The nginx config serves `/.well-known/acme-challenge/` over plain HTTP for this, so renewals
+   keep working. nginx needs some certificate to start: until this one exists, point the snippets
+   at a temporary self-signed certificate.
 
-Certbot asks you to add a TXT record at GoDaddy; this manual certificate must be **renewed by hand
-every 90 days** (GoDaddy's DNS API is generally not available for automatic renewal). Point
-`ssl_certificate`/`ssl_certificate_key` in `/etc/nginx/snippets/sofiacart-ssl.conf` at the
-certificate under `/etc/letsencrypt/live/…`, and skip the Cloudflare real-IP step.
+   In `/etc/nginx/snippets/sofiacart-ssl.conf` use
+   `/etc/letsencrypt/live/sofiacart.ph/fullchain.pem` and `/etc/letsencrypt/live/sofiacart.ph/privkey.pem`.
+
+2. **Store subdomains** (`*.sofiacart.ph`) — Let's Encrypt issues wildcards only through a DNS
+   challenge, and GoDaddy's DNS API is generally unavailable, so this one is renewed **by hand every
+   90 days** (Let's Encrypt emails a reminder):
+
+   ```bash
+   certbot certonly --manual --preferred-challenges dns --cert-name sofiacart-stores -d "*.sofiacart.ph"
+   ```
+
+   Certbot shows a value: add it at GoDaddy as a **TXT** record named `_acme-challenge`, wait a
+   minute, then continue. In `/etc/nginx/snippets/sofiacart-ssl-stores.conf` use
+   `/etc/letsencrypt/live/sofiacart-stores/fullchain.pem` and `.../privkey.pem`.
+
+3. Reload after the manual renewal: `nginx -t && systemctl reload nginx` (automatic renewals of the
+   first certificate reload nginx through the deploy hook).
+
+Moving to Cloudflare later (section 1) removes the manual renewal.
 
 ## Checklist
 
